@@ -12,7 +12,9 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { Celebration } from './components/Celebration';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { open } from '@tauri-apps/plugin-dialog';
+import { open, ask } from '@tauri-apps/plugin-dialog';
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 interface VideoMetadata {
   title: string;
@@ -72,6 +74,21 @@ function App() {
     invoke<boolean>('check_onboarding_complete').then((complete) => {
       setShowWelcome(!complete);
       if (complete) {
+        // Check for updates
+        check().then(async (update) => {
+          if (update) {
+            console.log(`found update ${update.version} from ${update.date} with notes ${update.body}`);
+            const yes = await ask(
+              `Clipme v${update.version} is available!\n\nRelease Notes:\n${update.body}`, 
+              { title: 'Update Available', kind: 'info', okLabel: 'Update Now', cancelLabel: 'Later' }
+            );
+            if (yes) {
+              await update.downloadAndInstall();
+              await relaunch();
+            }
+          }
+        }).catch(console.error);
+
         invoke<string>('get_download_path').then(setDownloadPath).catch(console.error);
         // Load license status
         // Load license status and settings
