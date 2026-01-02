@@ -47,7 +47,7 @@ export const UrlInput: React.FC<UrlInputProps> = ({ onUrlSubmit, isLoading }) =>
                 cx="12" 
                 cy="12" 
                 r="10" 
-                stroke="var(--primary-color)" 
+                stroke="#181818" 
                 strokeWidth="3" 
                 strokeLinecap="round"
                 strokeDasharray="31.4 31.4"

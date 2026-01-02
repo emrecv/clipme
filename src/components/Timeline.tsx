@@ -1,6 +1,7 @@
 import React from 'react';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
+import { EditableTime } from './EditableTime';
 
 interface TimelineProps {
   duration: number;
@@ -40,9 +41,25 @@ export const Timeline: React.FC<TimelineProps> = ({ duration, range, onChange })
             />
         </div>
         
-        <div className="range-labels">
-            <span>Start: {formatTime(range[0])}</span>
-            <span>End: {formatTime(range[1])}</span>
+        <div className="range-labels" style={{ gap: '1rem' }}>
+            <EditableTime 
+              label="Start" 
+              value={range[0]} 
+              max={range[1]} 
+              onChange={(newStart) => {
+                const s = Math.max(0, Math.min(newStart, range[1] - 1));
+                onChange([s, range[1]]);
+              }} 
+            />
+            <EditableTime 
+              label="End" 
+              value={range[1]} 
+              max={duration} 
+              onChange={(newEnd) => {
+                const e = Math.min(duration, Math.max(newEnd, range[0] + 1));
+                onChange([range[0], e]);
+              }} 
+            />
         </div>
         <div className="range-labels">
              <span>Duration: {formatTime(range[1] - range[0])}</span>

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "yt-clipper",
-  "version": "0.1.0",
-  "identifier": "com.emre.yt-clipper",
+  "productName": "Clipme",
+  "version": "1.0.0",
+  "identifier": "com.emre.clipme",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "YT Clipper",
+        "title": "Clipme",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
