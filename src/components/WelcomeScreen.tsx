@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { AuthModal } from './AuthModal';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LicenseInfo {
   is_valid: boolean;
@@ -12,9 +14,10 @@ interface LicenseInfo {
 interface WelcomeScreenProps {
   onComplete: (settings: { downloadPath: string; askEachTime: boolean; isPro: boolean }) => void;
   onLicenseActivated?: () => void;
+  isPro?: boolean;
 }
 
-export function WelcomeScreen({ onComplete, onLicenseActivated }: WelcomeScreenProps) {
+export function WelcomeScreen({ onComplete, onLicenseActivated, isPro: globalIsPro }: WelcomeScreenProps) {
   const [step, setStep] = useState(1);
   const [downloadOption, setDownloadOption] = useState<'default' | 'custom' | 'ask'>('default');
   const [customPath, setCustomPath] = useState('');
@@ -23,6 +26,32 @@ export function WelcomeScreen({ onComplete, onLicenseActivated }: WelcomeScreenP
   const [licenseError, setLicenseError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isPro, setIsPro] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const { user } = useAuth();
+
+  // Watch for global Pro activation (e.g. via Login Sync)
+  useEffect(() => {
+      // If parent tells us we are Pro, update state and transition
+      if (globalIsPro) {
+          setIsPro(true);
+          if (step === 2) {
+              setStep(3);
+              onLicenseActivated?.();
+          }
+          return;
+      }
+
+      // Fallback: Check checking backend status directly
+      invoke<LicenseInfo>('get_license_status').then(res => {
+          if (res.is_pro) {
+              setIsPro(true);
+              if (step === 2) {
+                  setStep(3); // Auto advance if we land on step 2 and are already Pro
+                  onLicenseActivated?.();
+              }
+          }
+      });
+  }, [user, step, globalIsPro]); 
 
   const handleSelectFolder = async () => {
     setIsSelecting(true);
@@ -105,7 +134,7 @@ export function WelcomeScreen({ onComplete, onLicenseActivated }: WelcomeScreenP
               <img src="/clipme-logo-white.svg" alt="Clipme" height="48" />
             </div>
             <h1>Welcome to Clipme</h1>
-            <p>Clip and download your favorite YouTube moments in seconds.</p>
+            <p>Clip and download your favorite content in seconds.</p>
             <button className="welcome-button primary" onClick={() => setStep(2)}>
               Get Started
             </button>
@@ -134,15 +163,37 @@ export function WelcomeScreen({ onComplete, onLicenseActivated }: WelcomeScreenP
                 Skip (Free)
               </button>
               <button 
-                className="welcome-button primary" 
+                className="welcome-button" 
                 onClick={handleVerifyLicense}
                 disabled={isVerifying}
+                style={{
+                  background: 'linear-gradient(135deg, #FFD60A 0%, #FF9F0A 100%)',
+                  color: 'black',
+                  fontWeight: '700',
+                  boxShadow: '0 4px 12px rgba(255, 214, 10, 0.3)'
+                }}
               >
                 {isVerifying ? 'Verifying...' : 'Activate Pro'}
               </button>
             </div>
+            
+            <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', width: '100%', textAlign: 'center' }}>
+                 <button 
+                    className="welcome-button"
+                    onClick={() => setShowAuth(true)}
+                    style={{ 
+                        width: '100%',
+                        background: 'linear-gradient(135deg, #bdc3c7 0%, #ecf0f1 50%, #f39c12 140%)',
+                        color: 'black',
+                        fontWeight: '600',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                    }}
+                 >
+                    Log In to Sync License
+                 </button>
+            </div>
 
-            <p className="welcome-hint">
+            <p className="welcome-hint" style={{ marginTop: '1rem' }}>
               <a href="https://emrecv.gumroad.com/l/clipme-pro" target="_blank" rel="noopener noreferrer">
                 Get a license key →
               </a>
@@ -161,15 +212,15 @@ export function WelcomeScreen({ onComplete, onLicenseActivated }: WelcomeScreenP
             <div className="pro-features-list">
               <div className="pro-feature-item">
                 <span className="feature-check">✓</span>
-                <span>Unrestricted 1080p, 4K & 8K Downloads</span>
+                <span className="pro-feature-text">Unrestricted 1080p, 4K & 8K Downloads</span>
               </div>
               <div className="pro-feature-item">
                 <span className="feature-check">✓</span>
-                <span>Priority Support</span>
+                <span className="pro-feature-text">Priority Support</span>
               </div>
               <div className="pro-feature-item">
                 <span className="feature-check">✓</span>
-                <span>Support Future Development</span>
+                <span className="pro-feature-text">Support Future Development</span>
               </div>
             </div>
 
@@ -249,6 +300,7 @@ export function WelcomeScreen({ onComplete, onLicenseActivated }: WelcomeScreenP
           </div>
         )}
       </div>
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} />
     </div>
   );
 }

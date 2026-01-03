@@ -1006,22 +1006,35 @@ input:focus, select:focus {
 .pro-features-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin: 2rem 0;
+  gap: 0.75rem;
+  margin: 1.5rem auto;
   width: 100%;
-  max-width: 320px;
+  max-width: 340px;
 }
 
 .pro-feature-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
   font-size: 1rem;
   color: var(--text-color);
   background: rgba(255, 214, 10, 0.05);
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
+  padding: 0.85rem 1.25rem;
+  border-radius: 12px;
   border: 1px solid rgba(255, 214, 10, 0.1);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.pro-feature-item:hover {
+  background: rgba(255, 214, 10, 0.08);
+  transform: translateY(-2px);
+}
+
+.pro-feature-text {
+  text-align: left;
+  flex: 1;
+  font-weight: 500;
+  line-height: 1.3;
 }
 
 .feature-check {
@@ -1030,6 +1043,7 @@ input:focus, select:focus {
   justify-content: center;
   width: 24px;
   height: 24px;
+  min-width: 24px;
   background: var(--primary-color);
   color: var(--bg-color);
   border-radius: 50%;
@@ -1042,6 +1056,32 @@ input:focus, select:focus {
   margin-bottom: 1.5rem;
 }
 
+/* Hide native video controls */
+.video-player-container video::-webkit-media-controls {
+  display: none !important;
+}
+.video-player-container video::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+
+.icon-button-ghost {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.icon-button-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.progress-bar-hover:hover {
+  height: 6px !important;
+}
 .settings-label {
   display: flex;
   align-items: center;
@@ -1109,4 +1149,107 @@ input:focus, select:focus {
   color: var(--text-secondary);
   margin-top: 0.5rem;
   opacity: 0.8;
+}
+
+/* Persistent Pill */
+.file-dropzone-pill {
+    width: fit-content;
+    margin: -1rem auto 1.5rem;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    z-index: 10;
+}
+
+.file-dropzone-pill:hover {
+    transform: scale(1.05);
+}
+
+.pill-content {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 1rem;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.file-dropzone-pill:hover .pill-content {
+    background: var(--surface-hover);
+    border-color: var(--primary-color);
+    color: var(--text-color);
+}
+
+.pill-icon {
+    color: inherit;
+}
+
+.pill-text {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Full Screen Drag Popup Overlay */
+.drag-popup-overlay {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.85); /* Darker backdrop */
+    backdrop-filter: blur(12px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.drag-popup-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.drag-popup-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    transform: scale(0.9);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.drag-popup-overlay.visible .drag-popup-content {
+    transform: scale(1);
+}
+
+.popup-icon-circle {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: rgba(255, 214, 10, 0.1);
+    border: 2px dashed var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+    box-shadow: 0 0 30px rgba(255, 214, 10, 0.15);
+}
+
+.drag-popup-content h2 {
+    font-size: 1.75rem;
+    color: var(--text-color);
+    margin: 0;
+}
+
+.drag-popup-content p {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin: 0;
 }

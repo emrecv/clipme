@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Impressum - ClipMe</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .legal-page {
+            min-height: 100vh;
+            padding: 120px 0 80px;
+        }
+        .legal-content {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        .legal-content h1 {
+            font-size: 2.5rem;
+            margin-bottom: 40px;
+        }
+        .legal-content h2 {
+            font-size: 1.25rem;
+            margin-top: 40px;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+        .legal-content p, .legal-content li {
+            color: var(--text-secondary);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+        .legal-content a {
+            color: var(--primary);
+        }
+        .legal-content a:hover {
+            text-decoration: underline;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            transition: color var(--transition);
+        }
+        .back-link:hover {
+            color: var(--primary);
+        }
+        .placeholder {
+            background: var(--bg-card);
+            border: 1px dashed var(--border-hover);
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            color: var(--primary);
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar scrolled" id="navbar">
+        <div class="nav-container">
+            <a href="../index.html" class="nav-logo">
+                <svg class="logo-icon" viewBox="0 0 360 125" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M332.464 101.64C315.384 101.64 302.504 87.22 302.504 65.66C302.504 44.66 315.104 29.54 331.484 29.54C346.184 29.54 356.404 41.44 359.204 58.24L316.364 70.28C319.304 83.02 327.284 91.14 337.924 91.14C345.064 91.14 351.784 87.36 356.824 80.64L358.784 84.84C353.884 93.66 345.204 101.64 332.464 101.64ZM315.104 59.08C315.104 61.04 315.244 63 315.384 64.96L345.064 56.42C343.244 45.22 337.924 35.42 329.244 35.42C320.984 35.42 315.104 44.1 315.104 59.08Z" fill="currentColor"/>
+                    <path d="M280.535 100.24C280.535 98.14 279.835 90.02 277.735 73.92L274.795 51.38C273.675 42.56 270.035 39.06 265.415 39.06C261.355 39.06 257.155 42 250.715 49.56L253.935 100.24H239.095C239.235 98.14 239.095 89.74 238.115 73.64L236.715 51.38C236.295 42.42 231.955 39.06 227.475 39.06C223.275 39.06 218.935 42.14 212.355 50.12V73.64C212.355 89.74 212.495 98.84 212.775 100.24H198.215C198.495 98.84 198.635 89.74 198.635 73.64V52.64C198.635 45.36 198.075 38.92 197.095 32.9L210.675 30.1C211.375 34.16 211.655 38.5 211.935 42.84C220.475 33.18 226.915 29.82 233.355 29.82C240.775 29.82 247.215 34.3 249.735 42.98C258.415 33.32 264.715 29.82 271.855 29.82C280.535 29.82 286.975 35.28 288.795 48.72L295.655 100.24H280.535Z" fill="currentColor"/>
+                    <path d="M154.343 101.36C150.143 101.36 145.943 100.52 141.463 98.84C141.463 114.1 141.603 122.64 141.883 124.04H127.323C127.603 122.64 127.743 113.54 127.743 97.44V52.64C127.743 45.36 127.183 38.92 126.203 32.9L139.783 30.1C140.343 33.88 140.763 37.8 140.903 41.86C147.063 33.74 154.063 29.82 161.623 29.82C175.763 29.82 185.983 43.68 185.983 63.28C185.983 85.54 172.683 101.36 154.343 101.36ZM141.463 90.72C145.663 94.36 149.863 95.9 154.063 95.9C165.123 95.9 172.263 84.42 172.263 68.18C172.263 51.52 164.843 38.92 155.463 38.92C150.563 38.92 145.803 42.42 141.463 50.26V90.72Z" fill="currentColor"/>
+                    <path d="M96.4907 100.24C96.7707 98.84 96.9107 89.74 96.9107 73.64V59.36C96.9107 43.26 96.6307 34.16 96.2107 32.9L110.631 30.1V73.64C110.631 89.74 110.771 98.84 111.051 100.24H96.4907ZM93.8307 11.2L103.771 1.25998L113.711 11.2L103.771 20.86L93.8307 11.2Z" fill="currentColor"/>
+                    <path d="M65.6578 100.24C65.9378 98.84 66.0778 89.74 66.0778 73.64V29.26C66.0778 13.16 65.7978 4.06 65.3778 2.8L79.7978 0V73.64C79.7978 89.74 79.9378 98.84 80.2178 100.24H65.6578Z" fill="currentColor"/>
+                    <path d="M29.12 101.64C12.6 101.64 0 86.94 0 66.36C0 46.48 11.76 29.68 28.98 29.68C40.18 29.68 49.56 36.54 54.32 51.1L41.16 54.18C38.5 43.4 33.6 35.42 26.46 35.42C18.06 35.42 12.74 45.5 12.74 59.08C12.74 76.58 21.14 91.14 34.44 91.14C41.86 91.14 48.16 86.66 51.94 79.1L54.6 83.02C50.68 92.96 42 101.64 29.12 101.64Z" fill="currentColor"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+
+    <main class="legal-page">
+        <div class="container">
+            <div class="legal-content">
+                <a href="../index.html" class="back-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Zurück zur Startseite
+                </a>
+                
+                <h1>Impressum</h1>
+                
+                <h2>Angaben gemäß § 5 TMG</h2>
+                <p class="placeholder">[DEIN VOLLSTÄNDIGER NAME]</p>
+                <p class="placeholder">[DEINE STRASSE UND HAUSNUMMER]</p>
+                <p class="placeholder">[DEINE PLZ UND STADT]</p>
+                <p class="placeholder">[DEIN LAND]</p>
+                
+                <h2>Kontakt</h2>
+                <p>E-Mail: <span class="placeholder">[DEINE E-MAIL]</span></p>
+                
+                <h2>Umsatzsteuer-ID</h2>
+                <p>Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:</p>
+                <p class="placeholder">[DEINE UST-ID, FALLS VORHANDEN, SONST ENTFERNEN]</p>
+                
+                <h2>Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
+                <p class="placeholder">[DEIN VOLLSTÄNDIGER NAME]</p>
+                <p class="placeholder">[DEINE ADRESSE]</p>
+                
+                <h2>EU-Streitschlichtung</h2>
+                <p>
+                    Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit: 
+                    <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener">https://ec.europa.eu/consumers/odr/</a>
+                </p>
+                <p>Unsere E-Mail-Adresse finden Sie oben im Impressum.</p>
+                
+                <h2>Verbraucherstreitbeilegung / Universalschlichtungsstelle</h2>
+                <p>
+                    Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer 
+                    Verbraucherschlichtungsstelle teilzunehmen.
+                </p>
+                
+                <h2>Haftung für Inhalte</h2>
+                <p>
+                    Als Diensteanbieter sind wir gemäß § 7 Abs.1 TMG für eigene Inhalte auf diesen Seiten 
+                    nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als 
+                    Diensteanbieter jedoch nicht verpflichtet, übermittelte oder gespeicherte fremde 
+                    Informationen zu überwachen oder nach Umständen zu forschen, die auf eine rechtswidrige 
+                    Tätigkeit hinweisen.
+                </p>
+                <p>
+                    Verpflichtungen zur Entfernung oder Sperrung der Nutzung von Informationen nach den 
+                    allgemeinen Gesetzen bleiben hiervon unberührt. Eine diesbezügliche Haftung ist jedoch 
+                    erst ab dem Zeitpunkt der Kenntnis einer konkreten Rechtsverletzung möglich. Bei 
+                    Bekanntwerden von entsprechenden Rechtsverletzungen werden wir diese Inhalte umgehend 
+                    entfernen.
+                </p>
+                
+                <h2>Haftung für Links</h2>
+                <p>
+                    Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen 
+                    Einfluss haben. Deshalb können wir für diese fremden Inhalte auch keine Gewähr 
+                    übernehmen. Für die Inhalte der verlinkten Seiten ist stets der jeweilige Anbieter 
+                    oder Betreiber der Seiten verantwortlich.
+                </p>
+                
+                <h2>Urheberrecht</h2>
+                <p>
+                    Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten 
+                    unterliegen dem deutschen Urheberrecht. Die Vervielfältigung, Bearbeitung, 
+                    Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechtes 
+                    bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
+                </p>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

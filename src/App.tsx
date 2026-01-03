@@ -10,16 +10,22 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { ProBadge } from './components/ProBadge';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Celebration } from './components/Celebration';
+import { FileDropZone } from './components/FileDropZone';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { useAuth } from './contexts/AuthContext';
+import { AuthModal } from './components/AuthModal';
+import { account } from './lib/appwrite';
 
 interface VideoMetadata {
   title: string;
   duration: number;
   formats: string[];
+  preview_url?: string;
 }
 
 interface DownloadProgress {
@@ -56,28 +62,75 @@ function App() {
   const [downloadPath, setDownloadPath] = useState('');
   const [askForPath, setAskForPath] = useState(false);
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
-  const downloadSessionRef = useRef(0);  // Counter to track download sessions
-  const [showWelcome, setShowWelcome] = useState<boolean | null>(null); // null = loading
+  const downloadSessionRef = useRef(0);
+  const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
   const [isPro, setIsPro] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [preferredQuality, setPreferredQuality] = useState<string | null>(null);
   
+  // New state for local files
+  const [isLocalFile, setIsLocalFile] = useState(false);
+  const [originalResolution, setOriginalResolution] = useState<string | null>(null);
+  const [containerFormat, setContainerFormat] = useState('mp4');
+  
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const { checkSession, user, logout } = useAuth();
 
   const showToast = useCallback((message: string, type: ToastType = 'info') => {
     setToast({ message, type });
   }, []);
 
-  // Check onboarding status and load license on mount
+  const handleCelebrationComplete = useCallback(() => {
+    setShowCelebration(false);
+  }, []);
+
+  useEffect(() => {
+    // Ping Appwrite to verify connection (for Onboarding Wizard)
+    try {
+        // @ts-ignore
+        if (client && typeof client.ping === 'function') { 
+            // @ts-ignore
+            client.ping(); 
+        }
+    } catch (e) { console.error('Ping failed', e); }
+
+    // Deep Link Listener for OAuth
+    // The plugin listener returns a promise that resolves to an unlisten function
+    let unlisten: (() => void) | undefined;
+
+    onOpenUrl(async (urls) => {
+      console.log('Deep link received:', urls);
+      for (const url of urls) {
+        if (url.includes('secret=') && url.includes('userId=')) {
+           const urlObj = new URL(url);
+           const secret = urlObj.searchParams.get('secret');
+           const userId = urlObj.searchParams.get('userId');
+           if (secret && userId) {
+             try {
+               await account.createSession(userId, secret);
+               await checkSession();
+               showToast('Successfully logged in!', 'success');
+             } catch(e: any) {
+               showToast('Login failed: ' + e.message, 'error');
+             }
+           }
+        }
+      }
+    }).then((fn) => { unlisten = fn; });
+
+    return () => {
+        if (unlisten) unlisten();
+    };
+  }, []);
+
   useEffect(() => {
     invoke<boolean>('check_onboarding_complete').then((complete) => {
       setShowWelcome(!complete);
       if (complete) {
-        // Check for updates
         check().then(async (update) => {
           if (update) {
-            console.log(`found update ${update.version} from ${update.date} with notes ${update.body}`);
             const yes = await ask(
               `Clipme v${update.version} is available!\n\nRelease Notes:\n${update.body}`, 
               { title: 'Update Available', kind: 'info', okLabel: 'Update Now', cancelLabel: 'Later' }
@@ -90,53 +143,77 @@ function App() {
         }).catch(console.error);
 
         invoke<string>('get_download_path').then(setDownloadPath).catch(console.error);
-        // Load license status
-        // Load license status and settings
         invoke<LicenseInfo>('get_license_status').then((license) => {
           setIsPro(license.is_pro);
-          // Load settings
           invoke<AppSettings>('get_app_settings').then((settings) => {
             if (settings.preferred_quality) {
               setPreferredQuality(settings.preferred_quality);
             }
-            
-            if (license.is_pro) {
-              // Valid Pro license
-              if (settings.preferred_quality) {
-                 // Will be applied when video meta loads
-                 // But for initial state (if any)
+            if (license.is_pro && settings.preferred_quality) {
                  setSelectedQuality(settings.preferred_quality);
-              } else {
+            } else if (license.is_pro) {
                  setSelectedQuality('Best');
-              }
             }
           }).catch(console.error);
         }).catch(console.error);
       }
     }).catch(() => {
-      setShowWelcome(true); // Show welcome on error
+      setShowWelcome(true);
     });
   }, []);
 
-  // Listen for progress events - uses session counter to filter stale events
+  // Sync license from account to local globally
+  const syncLock = useRef(false);
+
+  useEffect(() => {
+     // @ts-ignore
+     const prefs = user?.prefs as any;
+     // Only sync if:
+     // 1. User is logged in
+     // 2. User has a license key in prefs
+     // 3. We are not currently verifying (check ref for immediate lock)
+     // 4. We are not already Pro (or we want to re-validate on login)
+     if (user && prefs?.licenseKey && !syncLock.current && !isPro) {
+        console.log('Found license on account, syncing globally...');
+        syncLock.current = true;
+        invoke<LicenseInfo>('verify_license', { licenseKey: prefs.licenseKey })
+          .then(result => {
+             if (result.is_valid) {
+                 // Update local state
+                 setIsPro(true);
+                 // Only show celebration if NOT in onboarding (WelcomeScreen handles its own celebration)
+                 if (!showWelcome) {
+                     setShowCelebration(true);
+                 }
+                 showToast('License synced from account!', 'success');
+             }
+          })
+          .catch(err => {
+             console.error('Global license sync failed', err);
+          })
+          .finally(() => {
+             syncLock.current = false;
+          });
+     }
+  }, [user, isPro, showWelcome]); // Dependencies: user changes (login) or isPro changes
+
   useEffect(() => {
     const unlisten = listen<DownloadProgress>('download-progress', (event) => {
-      // Strict filtering: Only accept events that match the current session ID
-      // This is foolproof against race conditions
       if (event.payload.id === downloadSessionRef.current) {
         setProgress(event.payload);
       }
     });
-    
-    return () => {
-      unlisten.then(fn => fn());
-    };
+
+    return () => { unlisten.then(fn => fn()); };
   }, []);
 
-  const handleUrlSubmit = async (inputUrl: string) => {
+  const handleUrlSubmit = async (inputUrl: string, isLocal: boolean = false) => {
     setLoading(true);
-    showToast('Fetching video metadata...', 'info');
+    showToast(`${isLocal ? 'Analyzing file' : 'Fetching video metadata'}...`, 'info');
     setVideoMeta(null);
+    setIsLocalFile(isLocal);
+    setOriginalResolution(null);
+
     try {
       const meta = await invoke<VideoMetadata>('get_video_metadata', { url: inputUrl });
       setVideoMeta(meta);
@@ -144,11 +221,14 @@ function App() {
       setUrl(inputUrl);
       setToast(null);
       if (meta.formats && meta.formats.length > 0) {
-        // Set quality based on Pro status
+        // Infer original resolution for local files (assuming 1st is best/original)
+        if (isLocal) {
+             setOriginalResolution(meta.formats[0]);
+        }
+
         if (isPro) {
-          setSelectedQuality(meta.formats[0]); // Usually "Best"
+          setSelectedQuality(meta.formats[0]);
         } else {
-          // For free users, select the best available free quality
           const freeQuality = meta.formats.find(q => FREE_QUALITIES.includes(q)) || '720p';
           setSelectedQuality(freeQuality);
         }
@@ -161,10 +241,12 @@ function App() {
     }
   };
 
+  const handleFileSelect = (path: string) => {
+      handleUrlSubmit(path, true);
+  };
+
   const handleDownload = async () => {
     if (!videoMeta || !url) return;
-    
-    // Reset progress immediately to clear any stale data
     setProgress(null);
     
     if (downloading) {
@@ -173,22 +255,18 @@ function App() {
         await invoke('cancel_download');
         showToast('Download cancelled.', 'info');
       } catch (error) {
-        console.error(error);
         showToast('Failed to cancel: ' + error, 'error');
       }
       setDownloading(false);
-      downloadSessionRef.current = 0;  // End session
+      downloadSessionRef.current = 0;
       return;
     }
 
-    // Generate unique session ID (timestamp)
     const sessionId = Date.now();
     downloadSessionRef.current = sessionId;
-    
     setDownloading(true);
     setProgress({ percent: 0, speed: 'Starting', eta: '', downloaded: '', total: '', id: sessionId });
 
-    // If askForPath is enabled, prompt for location first
     let targetPath = downloadPath;
     if (askForPath) {
       try {
@@ -202,13 +280,11 @@ function App() {
           targetPath = selected;
           setDownloadPath(selected);
         } else {
-          // User cancelled folder selection
           setDownloading(false);
           setProgress(null);
           return;
         }
       } catch (err) {
-        console.error(err);
         showToast('Failed to select folder', 'error');
         setDownloading(false);
         setProgress(null);
@@ -223,11 +299,11 @@ function App() {
         start: range[0], 
         end: range[1],
         quality: selectedQuality,
-        id: sessionId // Pass the ID to backend
+        format: containerFormat,
+        id: sessionId 
       });
       showToast('Download complete! Saved to ' + targetPath, 'success');
     } catch (error) {
-      console.error(error);
       if (typeof error === 'string' && error.includes('cancelled')) {
         showToast('Download cancelled.', 'info');
       } else {
@@ -247,14 +323,12 @@ function App() {
         multiple: false,
         title: 'Select Download Folder',
       });
-      
       if (selected && typeof selected === 'string') {
         await invoke('set_download_path', { path: selected });
         setDownloadPath(selected);
         showToast('Download path updated!', 'success');
       }
     } catch (error) {
-      console.error(error);
       showToast('Failed to set download path', 'error');
     }
   };
@@ -265,7 +339,6 @@ function App() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Get short path for display
   const getShortPath = (path: string) => {
     const parts = path.split('/');
     return parts.slice(-2).join('/');
@@ -281,19 +354,28 @@ function App() {
     setShowWelcome(false);
   };
 
-  // Show nothing while checking onboarding status
-  if (showWelcome === null) {
-    return null;
-  }
+  if (showWelcome === null) return null;
 
-  // Show welcome screen if first time
+  const handleLogout = async () => {
+    try {
+      await logout();
+      await invoke('clear_license');
+      setIsPro(false);
+      showToast('Logged out successfully', 'success');
+    } catch (e) {
+      console.error('Logout error:', e);
+      showToast('Error logging out', 'error');
+    }
+  };
+
   if (showWelcome) {
     return (
       <>
-        <Celebration show={showCelebration} onComplete={() => setShowCelebration(false)} />
+        <Celebration show={showCelebration} onComplete={handleCelebrationComplete} />
         <WelcomeScreen 
           onComplete={handleWelcomeComplete} 
           onLicenseActivated={() => setShowCelebration(true)}
+          isPro={isPro}
         />
       </>
     );
@@ -311,17 +393,10 @@ function App() {
             const wasFree = !isPro;
             setIsPro(license.is_pro);
             if (license.is_pro) {
-              // If we have a preference, try to use it
-              if (preferredQuality) {
-                setSelectedQuality(preferredQuality);
-              } else {
-                setSelectedQuality('Best');
-              }
+              if (preferredQuality) setSelectedQuality(preferredQuality);
+              else setSelectedQuality('Best');
               
-              // Show celebration if upgrading from free to pro
-              if (wasFree || newIsPro) {
-                setShowCelebration(true);
-              }
+              if (wasFree || newIsPro) setShowCelebration(true);
             } else {
               setSelectedQuality('720p');
             }
@@ -331,17 +406,17 @@ function App() {
         onPreferredQualityChange={(quality) => {
           setPreferredQuality(quality);
           invoke('save_app_settings', { settings: { preferred_quality: quality } }).catch(console.error);
-          if (isPro && quality) {
-            setSelectedQuality(quality);
-          }
+          if (isPro && quality) setSelectedQuality(quality);
         }}
       />
 
       {/* Top Bar */}
       <div className="top-bar">
         <UserMenu 
-          onProfileClick={() => showToast('Profile coming soon!', 'info')}
+          user={user}
+          onProfileClick={() => setShowAuthModal(true)}
           onSettingsClick={() => setShowSettings(true)}
+          onLogout={handleLogout}
         />
         <img src="/clipme-logo-white.svg" alt="clipme" className="top-bar-logo" style={{ height: '32px' }} />
         <ProBadge isPro={isPro} onProActivated={() => {
@@ -351,33 +426,33 @@ function App() {
         }} />
       </div>
 
-      {/* Celebration Overlay */}
       <Celebration show={showCelebration} onComplete={() => setShowCelebration(false)} />
 
-      {/* Main Content */}
       <div className="main-content">
-        {/* Header */}
         <header className="header" style={{ marginBottom: videoMeta ? '0.5rem' : '2rem' }}>
-          {!videoMeta && <p>Paste a YouTube link to start clipping.</p>}
+          {!videoMeta && <p>Paste a video link or drop a file to start.</p>}
         </header>
 
-        {/* URL Input */}
         <div className="input-section">
           <div className="card">
-            <UrlInput onUrlSubmit={handleUrlSubmit} isLoading={loading} />
+            <UrlInput onUrlSubmit={(u) => handleUrlSubmit(u, false)} isLoading={loading} />
           </div>
         </div>
 
-        {/* Content Grid */}
+        {/* File Drop Zone with Peeking UI */}
+        <FileDropZone 
+            onFileSelect={handleFileSelect} 
+            onError={(msg) => showToast(msg, 'error')}
+            isPro={isPro} 
+        />
+
         {videoMeta && (
           <div className="content-grid fade-in">
-            {/* Preview Column */}
             <div className="preview-column">
-              <VideoPreview url={url} />
+              <VideoPreview url={url} previewUrl={videoMeta.preview_url} />
               <h2>{videoMeta.title}</h2>
             </div>
 
-            {/* Controls Column */}
             <div className="controls-column">
               <Timeline 
                 duration={videoMeta.duration} 
@@ -386,7 +461,7 @@ function App() {
               />
 
               <div className="card">
-                <h3>Output Settings</h3>
+                <h3>{isLocalFile ? 'Transcode & Clip' : 'Output Settings'}</h3>
                 
                 <div className="settings-row">
                   <div className="quality-select">
@@ -396,7 +471,7 @@ function App() {
                       fontSize: '0.85rem', 
                       color: 'var(--text-secondary)' 
                     }}>
-                      Quality
+                      {isLocalFile ? 'Target Quality' : 'Quality'}
                     </label>
                     <select 
                       value={selectedQuality} 
@@ -405,13 +480,50 @@ function App() {
                     >
                       {videoMeta.formats.map(fmt => {
                         const isProOnly = !FREE_QUALITIES.includes(fmt);
-                        const isDisabled = isProOnly && !isPro;
+                        
+                        // Local File Logic: Can't choose quality higher than original
+                        // Assume formats are ordered Best -> Worst or we parse them
+                        // Simple Logic: If isLocalFile, disable qualities that seem higher? 
+                        // Actually lib.rs generates the list based on max height, so the list IS valid downscales only!
+                        // e.g. if file is 1080p, list is Best, 1080p, 720p... 
+                        // So we don't need complex frontend checks here because backend already filtered the list!
+                        
+                        // Check Transcoding is PRO only logic
+                        // If isLocalFile and not Pro, maybe restrict to "Best" (Copy) only?
+                        // User said: "Transcoden ist ebenfalls eine Premium Funktion."
+                        // So if not Pro, they can only keep original (Best)?
+                        
+                        const isTranscoding = isLocalFile && fmt !== (originalResolution || 'Best') && fmt !== 'Best';
+                        const locked = (!isPro && isProOnly) || (isLocalFile && !isPro && isTranscoding);
+
                         return (
-                          <option key={fmt} value={fmt} disabled={isDisabled}>
-                            {fmt}{isDisabled ? ' (Pro)' : ''}
+                          <option key={fmt} value={fmt} disabled={locked}>
+                            {fmt}{locked ? ' (Pro)' : ''}
                           </option>
                         );
                       })}
+                    </select>
+                  </div>
+
+                  <div className="quality-select" style={{ minWidth: '80px' }}>
+                    <label style={{ 
+                      display: 'block', 
+                      marginBottom: '0.4rem', 
+                      fontSize: '0.85rem', 
+                      color: 'var(--text-secondary)' 
+                    }}>
+                      Format
+                    </label>
+                    <select 
+                      value={containerFormat} 
+                      onChange={(e) => setContainerFormat(e.target.value)}
+                      disabled={downloading}
+                    >
+                      <option value="mp4">MP4</option>
+                      <option value="mov">MOV</option>
+                      <option value="mkv">MKV</option>
+                      <option value="avi">AVI</option>
+                      <option value="webm">WEBM</option>
                     </select>
                   </div>
 
@@ -427,10 +539,8 @@ function App() {
                   </div>
                 </div>
 
-                {/* Progress Bar */}
                 {downloading && progress && (
                   <div style={{ marginTop: '1rem' }}>
-                    {/* Progress container */}
                     <div style={{
                       width: '100%',
                       height: '8px',
@@ -447,7 +557,6 @@ function App() {
                         transition: 'width 0.2s ease'
                       }} />
                     </div>
-                    {/* Status text */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -465,9 +574,7 @@ function App() {
         )}
       </div>
 
-      {/* Bottom Bar - Quick Settings */}
       <div className="bottom-bar">
-        {/* Version Badge */}
         <div className="version-badge">
           <img src="/stars.svg" alt="" width="14" height="14" />
           <span>v1.0</span>
@@ -487,7 +594,6 @@ function App() {
             </span>
           </button>
           
-          {/* Ask for location toggle */}
           <label style={{
             display: 'flex',
             alignItems: 'center',
@@ -512,7 +618,6 @@ function App() {
         </div>
       </div>
 
-      {/* Toast */}
       {toast && (
         <Toast 
           message={toast.message} 
@@ -520,6 +625,8 @@ function App() {
           onClose={() => setToast(null)} 
         />
       )}
+      
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 }

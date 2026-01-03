@@ -1,13 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+import { Models } from 'appwrite';
+
 interface UserMenuProps {
+  user: Models.User<Models.Preferences> | null;
   onProfileClick?: () => void;
   onSettingsClick?: () => void;
+  onLogout?: () => void;
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({ 
+  user,
   onProfileClick, 
-  onSettingsClick 
+  onSettingsClick,
+  onLogout
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -23,6 +29,10 @@ export const UserMenu: React.FC<UserMenuProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const getInitials = (name: string) => {
+    return name.substring(0, 2).toUpperCase();
+  };
+
   return (
     <div ref={menuRef} style={{ position: 'relative' }}>
       {/* Avatar Button */}
@@ -37,24 +47,30 @@ export const UserMenu: React.FC<UserMenuProps> = ({
           cursor: 'pointer',
           border: `3px solid ${isOpen ? '#2E2E2E' : '#282828'}`,
           padding: 0,
-          background: 'none',
+          background: user ? 'var(--primary-color)' : 'none',
+          color: user ? 'black' : 'var(--primary-color)',
           transition: 'all 0.2s ease',
           outline: 'none',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          fontSize: '1.2rem',
+          fontWeight: 'bold',
         }}
         onMouseEnter={(e) => e.currentTarget.style.borderColor = '#2E2E2E'}
         onMouseLeave={(e) => e.currentTarget.style.borderColor = isOpen ? '#2E2E2E' : '#282828'}
       >
-        <svg 
-          width="20" 
-          height="20" 
-          viewBox="-32 0 512 512" 
-          fill="var(--primary-color)"
-        >
-          <path d="M64 224h13.5c24.7 56.5 80.9 96 146.5 96s121.8-39.5 146.5-96H384c8.8 0 16-7.2 16-16v-96c0-8.8-7.2-16-16-16h-13.5C345.8 39.5 289.6 0 224 0S102.2 39.5 77.5 96H64c-8.8 0-16 7.2-16 16v96c0 8.8 7.2 16 16 16zm40-88c0-22.1 21.5-40 48-40h144c26.5 0 48 17.9 48 40v24c0 53-43 96-96 96h-48c-53 0-96-43-96-96v-24zm72 72l12-36 36-12-36-12-12-36-12 36-36 12 36 12 12 36zm151.6 113.4C297.7 340.7 262.2 352 224 352s-73.7-11.3-103.6-30.6C52.9 328.5 0 385 0 454.4v9.6c0 26.5 21.5 48 48 48h80v-64c0-17.7 14.3-32 32-32h128c17.7 0 32 14.3 32 32v64h80c26.5 0 48-21.5 48-48v-9.6c0-69.4-52.9-125.9-120.4-133zM272 448c-8.8 0-16 7.2-16 16s7.2 16 16 16 16-7.2 16-16-7.2-16-16-16zm-96 0c-8.8 0-16 7.2-16 16v48h32v-48c0-8.8-7.2-16-16-16z"/>
-        </svg>
+        {user ? (
+            getInitials(user.name || user.email)
+        ) : (
+            <img 
+              src="/user-astronaut.svg" 
+              alt="User" 
+              width="24" 
+              height="24" 
+              style={{ filter: 'brightness(0) saturate(100%) invert(88%) sepia(21%) saturate(6969%) hue-rotate(359deg) brightness(103%) contrast(103%)' }} 
+            />
+        )}
       </button>
 
       {/* Dropdown Menu */}
@@ -73,14 +89,39 @@ export const UserMenu: React.FC<UserMenuProps> = ({
             animation: 'fadeIn 0.2s ease-out',
           }}
         >
-          <MenuItem 
-            label="Profile" 
-            onClick={() => { onProfileClick?.(); setIsOpen(false); }}
-          />
+          {user ? (
+             <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--border-color)' }}>
+                 <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-color)' }}>{user.name}</div>
+                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
+             </div>
+          ) : (
+            <MenuItem 
+                label="Sign In / Register" 
+                onClick={() => { onProfileClick?.(); setIsOpen(false); }}
+            />
+          )}
+
+          {user && (
+              <MenuItem 
+                label="Profile" 
+                onClick={() => { onProfileClick?.(); setIsOpen(false); }}
+            />
+          )}
+          
           <MenuItem 
             label="Settings" 
             onClick={() => { onSettingsClick?.(); setIsOpen(false); }}
           />
+
+          {user && (
+             <>
+               <div style={{ height: 1, background: 'var(--border-color)', margin: '0.2rem 0' }} />
+               <MenuItem 
+                   label="Log Out" 
+                   onClick={() => { onLogout?.(); setIsOpen(false); }}
+               />
+             </>
+          )}
         </div>
       )}
     </div>

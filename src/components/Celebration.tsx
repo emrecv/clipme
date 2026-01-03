@@ -11,7 +11,12 @@ export function Celebration({ show, onComplete }: CelebrationProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!show || !canvasRef.current) return;
+    if (!show) {
+      setVisible(false);
+      return;
+    }
+    
+    if (!canvasRef.current) return;
 
     setVisible(true);
 

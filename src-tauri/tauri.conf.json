@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' 'unsafe-inline'; frame-src https://www.youtube.com https://youtube.com;"
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' asset: https://asset.localhost blob: data: https://*.ytimg.com; media-src 'self' asset: https://asset.localhost blob: https://*.youtube.com; frame-src https://www.youtube.com https://youtube.com; connect-src 'self' https://api.gumroad.com https://github.com;"
     }
   },
   "bundle": {
@@ -41,6 +41,9 @@
       "endpoints": [
         "https://github.com/emrecv/clipme/releases/latest/download/latest.json"
       ]
+    },
+    "deep-link": {
+       "schemes": ["clipme"]
     }
   }
 }

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useAuth } from '../contexts/AuthContext';
+import { account } from '../lib/appwrite';
 
 interface LicenseInfo {
   is_valid: boolean;
@@ -37,6 +39,8 @@ export function SettingsPanel({
     }
   }, [isOpen]);
 
+  const { user, checkSession } = useAuth();
+
   const handleVerify = async () => {
     if (!newLicenseKey.trim()) {
       setError('Please enter a license key');
@@ -51,6 +55,17 @@ export function SettingsPanel({
         setNewLicenseKey('');
         // Notify parent that we are now Pro
         onLicenseChange(true);
+
+        // Sync to account if logged in
+        if (user) {
+           try {
+             const prefs = user.prefs as any;
+             await account.updatePrefs({ ...prefs, licenseKey: newLicenseKey.trim() });
+             await checkSession(); // Refresh user state
+           } catch(e) {
+             console.error('Failed to sync license to account', e);
+           }
+        }
       } else {
         setError('Invalid or expired license');
       }
@@ -87,7 +102,7 @@ export function SettingsPanel({
         <div className="settings-content">
           {/* License Section */}
           <div className="settings-section">
-            <h3>Download Preferences</h3>
+            <h3>Preferences</h3>
             <div className="settings-input-group">
               <label className="settings-label">
                 Preferred Quality
@@ -137,6 +152,13 @@ export function SettingsPanel({
                 )}
               </div>
 
+              {user && licenseInfo?.license_key === (user.prefs as any)?.licenseKey && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--primary-color)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }}></span>
+                    Linked to {user.email}
+                  </div>
+              )}
+
               {licenseInfo?.license_key && (
                 <div className="license-status-row">
                   <span className="license-label">License Key</span>
@@ -152,17 +174,22 @@ export function SettingsPanel({
                   <span className="license-email">{licenseInfo.email}</span>
                 </div>
               )}
+
+              {isPro && (
+                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button 
+                    className="settings-button danger"
+                    onClick={handleClearLicense}
+                    disabled={isClearing}
+                    style={{ fontSize: '0.8rem', padding: '0.6rem 1rem' }}
+                  >
+                    {isClearing ? 'Removing...' : 'Remove License'}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {isPro ? (
-              <button 
-                className="settings-button danger"
-                onClick={handleClearLicense}
-                disabled={isClearing}
-              >
-                {isClearing ? 'Removing...' : 'Remove License'}
-              </button>
-            ) : (
+            {!isPro && (
               <div className="license-activate-section">
                 <input
                   type="text"
@@ -193,16 +220,28 @@ export function SettingsPanel({
           </div>
 
           {/* Developer Section */}
-          <div className="settings-section">
-            <h3>Developer</h3>
+          <div className="settings-section" style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+            <h3 style={{ color: '#ff6b6b' }}>Danger Zone</h3>
+            <p className="settings-hint" style={{ marginBottom: '1rem' }}>
+              Only use this if you are experiencing issues. This will reset all local data.
+            </p>
             <button 
               className="settings-button danger"
               onClick={async () => {
+                try {
+                   // Ensure we logout from Appwrite session
+                   await checkSession();
+                  if (user) {
+                     await account.deleteSession('current');
+                  }
+                } catch(e) { console.error('Logout failed', e); }
+                
                 await invoke('reset_app');
                 window.location.reload();
               }}
+              style={{ width: '100%' }}
             >
-              Reset App (Show Onboarding)
+              Factory Reset App
             </button>
           </div>
         </div>
