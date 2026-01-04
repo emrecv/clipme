@@ -384,6 +384,22 @@ function initScrollSpy() {
       const href = link.getAttribute('href');
       if (href.includes(current) && current !== '') {
         link.classList.add('active');
+        
+        // Auto-scroll nav to show active item
+        const nav = document.querySelector('.header-nav');
+        if (nav && link.offsetParent) {
+          const navRect = nav.getBoundingClientRect();
+          const linkRect = link.getBoundingClientRect();
+          
+          // Check if link is outside visible area of nav
+          if (linkRect.left < navRect.left || linkRect.right > navRect.right) {
+            link.scrollIntoView({ 
+              behavior: 'smooth', 
+              inline: 'center', 
+              block: 'nearest' 
+            });
+          }
+        }
       } else if (current === '' && href === '#') {
          // Default to top if nothing active
          // link.classList.add('active'); 

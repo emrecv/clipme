@@ -15,6 +15,29 @@ struct AppState {
     current_file_path: Mutex<Option<PathBuf>>,
 }
 
+/// Get the path to a bundled sidecar binary.
+/// Tauri automatically appends the platform-specific suffix and extension.
+fn get_sidecar_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+    app.path()
+        .resolve(format!("binaries/{}", name), tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve {} path: {}", name, e))
+}
+
+/// Get the yt-dlp binary path
+fn get_ytdlp_path(app: &AppHandle) -> Result<PathBuf, String> {
+    get_sidecar_path(app, "yt-dlp")
+}
+
+/// Get the ffmpeg binary path  
+fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
+    get_sidecar_path(app, "ffmpeg")
+}
+
+/// Get the ffprobe binary path (bundled alongside ffmpeg)
+fn get_ffprobe_path(app: &AppHandle) -> Result<PathBuf, String> {
+    get_sidecar_path(app, "ffprobe")
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VideoMetadata {
     title: String,
@@ -34,8 +57,12 @@ pub struct DownloadProgress {
 }
 
 #[tauri::command]
-async fn get_video_metadata(url: String) -> Result<VideoMetadata, String> {
+async fn get_video_metadata(app: AppHandle, url: String) -> Result<VideoMetadata, String> {
     println!("Fetching metadata for: {}", url);
+
+    // Get sidecar paths
+    let ffprobe_path = get_ffprobe_path(&app)?;
+    let ytdlp_path = get_ytdlp_path(&app)?;
 
     // Check if input is a local file
     let path = std::path::Path::new(&url);
@@ -43,7 +70,7 @@ async fn get_video_metadata(url: String) -> Result<VideoMetadata, String> {
         println!("Detected local file: {:?}", path);
 
         // Use ffprobe to get metadata
-        let output = Command::new("ffprobe")
+        let output = Command::new(&ffprobe_path)
             .args(&[
                 "-v",
                 "quiet",
@@ -58,7 +85,7 @@ async fn get_video_metadata(url: String) -> Result<VideoMetadata, String> {
             .output()
             .map_err(|e| {
                 format!(
-                    "Failed to execute ffprobe: {}. Make sure ffmpeg is installed.",
+                    "Failed to execute ffprobe: {}",
                     e
                 )
             })?;
@@ -124,15 +151,10 @@ async fn get_video_metadata(url: String) -> Result<VideoMetadata, String> {
         });
     }
 
-    let status_check = Command::new("yt-dlp").arg("--version").output();
-    if status_check.is_err() {
-        return Err("yt-dlp not found. Please install it.".to_string());
-    }
-
     let is_youtube = url.contains("youtube.com") || url.contains("youtu.be");
 
     let output = if is_youtube {
-        Command::new("yt-dlp")
+        Command::new(&ytdlp_path)
             .args(&["--dump-json", "--flat-playlist", "--no-warnings", &url])
             .output()
             .map_err(|e| format!("Failed to execute yt-dlp: {}", e))?
@@ -145,7 +167,7 @@ async fn get_video_metadata(url: String) -> Result<VideoMetadata, String> {
 
         println!("Downloading preview to: {}", template_str);
 
-        Command::new("yt-dlp")
+        Command::new(&ytdlp_path)
             .args(&[
                 "--print-json",
                 "--no-warnings",
@@ -631,6 +653,10 @@ async fn download_clip(
         url, start, end, quality, format, id
     );
 
+    // Get sidecar paths
+    let ffmpeg_path = get_ffmpeg_path(&app)?;
+    let ytdlp_path = get_ytdlp_path(&app)?;
+
     let safe_title = sanitize_filename(&title);
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -768,7 +794,7 @@ async fn download_clip(
 
         println!("Running FFmpeg: {:?}", ffmpeg_args);
 
-        let mut child = Command::new("ffmpeg")
+        let mut child = Command::new(&ffmpeg_path)
             .args(&ffmpeg_args)
             .stderr(Stdio::piped())
             .spawn()
@@ -884,7 +910,7 @@ async fn download_clip(
 
     args.push(url);
 
-    let mut child = Command::new("yt-dlp")
+    let mut child = Command::new(&ytdlp_path)
         .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1039,7 +1065,7 @@ async fn download_clip(
             &final_path,
         ];
 
-        let mut transcode_child = Command::new("ffmpeg")
+        let mut transcode_child = Command::new(&ffmpeg_path)
             .args(&ffmpeg_args)
             .stderr(Stdio::piped())
             .spawn()

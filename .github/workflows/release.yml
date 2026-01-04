@@ -17,17 +17,87 @@ jobs:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
             name: 'macOS-ARM64'
+            ytdlp_asset: 'yt-dlp_macos'
+            ytdlp_binary: 'yt-dlp-aarch64-apple-darwin'
+            ffmpeg_url: 'https://evermeet.cx/ffmpeg/getrelease/zip'
+            ffprobe_url: 'https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip'
+            ffmpeg_binary: 'ffmpeg-aarch64-apple-darwin'
+            ffprobe_binary: 'ffprobe-aarch64-apple-darwin'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
             name: 'macOS-Intel'
+            ytdlp_asset: 'yt-dlp_macos'
+            ytdlp_binary: 'yt-dlp-x86_64-apple-darwin'
+            ffmpeg_url: 'https://evermeet.cx/ffmpeg/getrelease/zip'
+            ffprobe_url: 'https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip'
+            ffmpeg_binary: 'ffmpeg-x86_64-apple-darwin'
+            ffprobe_binary: 'ffprobe-x86_64-apple-darwin'
           - platform: 'windows-latest'
             args: ''
             name: 'Windows'
+            ytdlp_asset: 'yt-dlp.exe'
+            ytdlp_binary: 'yt-dlp-x86_64-pc-windows-msvc.exe'
+            ffmpeg_url: 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
+            ffmpeg_binary: 'ffmpeg-x86_64-pc-windows-msvc.exe'
+            ffprobe_binary: 'ffprobe-x86_64-pc-windows-msvc.exe'
 
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Create binaries directory
+        run: mkdir -p src-tauri/binaries
+        shell: bash
+
+      # Download yt-dlp
+      - name: Download yt-dlp (macOS/Linux)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${{ matrix.ytdlp_asset }}" -o "src-tauri/binaries/${{ matrix.ytdlp_binary }}"
+          chmod +x "src-tauri/binaries/${{ matrix.ytdlp_binary }}"
+        shell: bash
+
+      - name: Download yt-dlp (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          curl -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/${{ matrix.ytdlp_asset }}" -o "src-tauri/binaries/${{ matrix.ytdlp_binary }}"
+        shell: bash
+
+      # Download FFmpeg
+      - name: Download FFmpeg (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Download and extract FFmpeg
+          curl -L "${{ matrix.ffmpeg_url }}" -o ffmpeg.zip
+          unzip -o ffmpeg.zip
+          mv ffmpeg "src-tauri/binaries/${{ matrix.ffmpeg_binary }}"
+          chmod +x "src-tauri/binaries/${{ matrix.ffmpeg_binary }}"
+          rm ffmpeg.zip
+          
+          # Download and extract FFprobe
+          curl -L "${{ matrix.ffprobe_url }}" -o ffprobe.zip
+          unzip -o ffprobe.zip
+          mv ffprobe "src-tauri/binaries/${{ matrix.ffprobe_binary }}"
+          chmod +x "src-tauri/binaries/${{ matrix.ffprobe_binary }}"
+          rm ffprobe.zip
+        shell: bash
+
+      - name: Download FFmpeg (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          curl -L "${{ matrix.ffmpeg_url }}" -o ffmpeg.zip
+          unzip -o ffmpeg.zip
+          # Find the ffmpeg.exe in the extracted folder
+          FFMPEG_DIR=$(find . -maxdepth 1 -type d -name "ffmpeg-*" | head -1)
+          cp "$FFMPEG_DIR/bin/ffmpeg.exe" "src-tauri/binaries/${{ matrix.ffmpeg_binary }}"
+          cp "$FFMPEG_DIR/bin/ffprobe.exe" "src-tauri/binaries/${{ matrix.ffprobe_binary }}"
+          rm -rf "$FFMPEG_DIR" ffmpeg.zip
+        shell: bash
+
+      - name: List binaries
+        run: ls -la src-tauri/binaries/
+        shell: bash
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
