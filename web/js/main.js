@@ -10,7 +10,91 @@ document.addEventListener('DOMContentLoaded', () => {
   initCouponCopy();
   initFAQ();
   initScrollSpy();
+  initDownloadLinks();
+  initPricingScroll();
 });
+
+// ========== Pricing Initial Scroll ==========
+function initPricingScroll() {
+  // Only for mobile
+  if (window.innerWidth > 768) return;
+
+  const grid = document.querySelector('.pricing-grid');
+  const proCard = document.querySelector('.pricing-plan-pro');
+  
+  if (!grid || !proCard) return;
+
+  // Wait a tick for layout
+  setTimeout(() => {
+    // Check if grid is scrollable
+    if (grid.scrollWidth <= grid.clientWidth) return;
+
+    // Calculate position to center/show Pro card
+    // We want Pro card to be the first fully visible main element
+    const paddingLeft = 24; // The padding on the grid
+    const targetScroll = proCard.offsetLeft - grid.offsetLeft - paddingLeft;
+    
+    grid.scrollTo({
+      left: targetScroll,
+      behavior: 'auto'
+    });
+  }, 100);
+}
+
+// ========== GitHub Download Links ==========
+function initDownloadLinks() {
+  const btnMacSilicon = document.getElementById('download-mac-silicon');
+  const btnMacIntel = document.getElementById('download-mac-intel');
+  const btnWindows = document.getElementById('download-windows');
+
+  // If buttons aren't there, skip
+  if (!btnMacSilicon && !btnMacIntel && !btnWindows) return;
+
+  fetch('https://api.github.com/repos/emrecv/clipme/releases/latest')
+    .then(response => {
+      if (!response.ok) throw new Error('Network response was not ok');
+      return response.json();
+    })
+    .then(data => {
+      const assets = data.assets;
+      if (!assets) return;
+
+      // Find assets
+      // Mac Silicon: looks for .dmg and 'aarch64'
+      const macSilicon = assets.find(a => a.name.endsWith('.dmg') && a.name.includes('aarch64'));
+      
+      // Mac Intel: looks for .dmg and NOT 'aarch64' (assuming x64 or universal is the other one)
+      // updating logic to be safe: if there is another dmg that is NOT the silicon one, use it.
+      const macIntel = assets.find(a => a.name.endsWith('.dmg') && !a.name.includes('aarch64'));
+
+      // Windows: looks for .exe or .msi
+      const windows = assets.find(a => a.name.endsWith('.exe') || a.name.endsWith('.msi'));
+
+      if (btnMacSilicon && macSilicon) {
+        btnMacSilicon.href = macSilicon.browser_download_url;
+      }
+
+      if (btnMacIntel && macIntel) {
+        btnMacIntel.href = macIntel.browser_download_url;
+      }
+
+      if (btnWindows && windows) {
+        btnWindows.href = windows.browser_download_url;
+      }
+      
+      // Update Version Badge
+      const versionBadge = document.getElementById('version-badge-text');
+      if (versionBadge && data.tag_name) {
+          // Remove 'v' from tag name if present for cleaner display "Version 1.0.1"
+          const version = data.tag_name.replace(/^v/, '');
+          versionBadge.textContent = `Version ${version} is here`;
+      }
+    })
+    .catch(error => {
+      console.warn('Failed to fetch latest releases:', error);
+      // Fallback is already the releases page, so we don't need to do anything
+    });
+}
 
 // ========== React Bits: Decrypted Text Effect ==========
 function initDecryptedText() {

@@ -119,10 +119,18 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.3s ease;
   
-  /* Make it compact */
-  max-width: 900px; /* Reduced width */
-  margin: 0 auto;
-  border-radius: 999px; /* Pill shape */
+  /* Content-width: shrink to fit content */
+  width: fit-content;
+  margin: 0 auto; /* Center it */
+  border-radius: 24px; /* Rounded corners */
+}
+
+/* Base header styles */
+.header-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
 }
 
 .matte-header.is-scrolled {
@@ -243,34 +251,9 @@ button {
 }
 
 /* Updated CTA outside nav */
+/* .header-btn removed/hidden */
 .header-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 20px;
-  border-radius: 99px; /* Keep buttons purely round/pill */
-  font-weight: 600;
-  font-size: 13px;
-  color: #000;
-  background: #fff; /* High contrast CTA */
-  border: none;
-  text-decoration: none;
-  transition: all 0.2s ease;
-  margin-left: 8px;
-}
-
-.header-btn:hover {
-  background: var(--primary); /* Pop to yellow on hover */
-  transform: translateY(-1px);
-}
-
-.header-btn:active {
-  transform: scale(0.96);
-}
-
-.header-btn svg {
-  flex-shrink: 0;
+  display: none;
 }
 
 /* Mobile Responsiveness */
@@ -279,23 +262,86 @@ button {
     top: 10px;
     max-width: calc(100% - 24px); /* Margins on sides */
     border-radius: 18px;
-  }
-  
-  .header-nav {
-    display: none; /* Hide nav links on mobile for simplicity */
+    padding: 0 4px;
   }
   
   .header-wrap {
-    padding: 10px 12px;
+    padding: 6px 12px;
+    flex-wrap: nowrap; /* Keep in one line */
+    gap: 8px;
+    justify-content: space-between;
   }
-  
-  .logo-svg {
-    width: 80px;
+
+  .header-logo {
+     margin-right: 0;
+     padding-left: 0;
+     flex-shrink: 0;
   }
   
   .header-btn {
-    padding: 8px 16px;
-    font-size: 12px;
+    margin-left: 0;
+    margin-right: 0;
+    padding: 8px; /* Square-ish */
+    font-size: 0; /* Hide text */
+    border-radius: 50%; /* Circle button */
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .header-btn span {
+    display: none;
+  }
+  
+  .header-btn svg {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+  }
+
+  /* Make nav display on mobile as horizontal scroll IN BETWEEN */
+  .header-nav {
+    display: flex;
+    flex: 1; /* Take available space */
+    order: 0; /* Natural flow */
+    overflow-x: auto;
+    padding: 0 8px;
+    gap: 6px;
+    scroll-padding: 0 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-top: 0;
+    border-top: none; 
+    padding-top: 0;
+    align-items: center;
+    /* Hide scrollbar */
+    mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 10px, black 90%, transparent);
+  }
+  
+  .header-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    white-space: nowrap;
+    background: transparent; 
+    padding: 6px 10px;
+    border-radius: 99px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  
+  .nav-item.active {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+  }
+  
+  .logo-svg {
+    width: 70px; /* Slightly smaller to fit nav */
   }
 }
 
@@ -901,7 +947,9 @@ button {
 /* -- Pricing -- */
 .pricing {
   /* Increased padding to accommodate the angled cut without clipping content */
-  padding: calc(var(--section-space) + 40px) 0;
+  /* Increased padding to accommodate the angled cut without clipping content 
+     Added extra top padding for hover effect (approx 30px buffer) */
+  padding: calc(var(--section-space) + 60px) 0 calc(var(--section-space) + 40px);
   position: relative;
   overflow: hidden;
   background-color: var(--primary); /* Poppy Yellow Background */
@@ -1125,6 +1173,26 @@ button {
   transform: translateX(0);
 }
 
+/* Copy feedback text - hidden by default */
+.copy-feedback {
+  position: absolute;
+  right: -60px;
+  background: #000;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+.coupon-code-box.copied .copy-feedback {
+  opacity: 1;
+}
+
 .coupon-hint {
   font-size: 12px;
   color: #888;
@@ -1195,30 +1263,49 @@ button {
 }
 
 .plan-cta-primary {
-  background: #000; /* Solid Black */
+  background: linear-gradient(
+    -45deg,
+    #ff6b35,
+    #f7931e,
+    #ff4757,
+    #ff6b35
+  );
+  background-size: 400% 400%;
+  animation: gradientShift 6s ease infinite;
   color: #fff;
-  border: 2px solid #000;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border: none;
+  box-shadow: 0 4px 20px rgba(255, 107, 53, 0.4);
+}
+
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 .plan-cta-primary:hover {
-  background: #333;
-  border-color: #333;
   transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 30px rgba(255, 107, 53, 0.6);
   color: #fff;
 }
 
 .plan-cta-secondary {
-  background: transparent;
-  border: 2px solid #e5e5e5;
-  color: #000;
+  background: #000;
+  border: 2px solid #000;
+  color: #fff;
 }
 
 .plan-cta-secondary:hover {
-  border-color: #000;
-  background: transparent;
+  background: #222;
+  border-color: #222;
   transform: translateY(-2px);
+  color: #fff;
 }
 
 @media (max-width: 900px) {
@@ -1330,9 +1417,15 @@ button {
 }
 
 .download-tile .small {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7); /* Brighter */
+  background: rgba(255, 255, 255, 0.1); /* Pill bg */
+  padding: 4px 8px;
+  border-radius: 6px; /* Less rounded corners */
+  margin-top: 4px; /* Default for stack */
+  display: inline-block;
+  white-space: nowrap;
 }
 
 /* Unique Gradient Hovers */
@@ -1470,38 +1563,57 @@ button {
 .footer {
   padding: 60px 0;
   border-top: 1px solid var(--border);
+  background: var(--bg);
 }
 
-.footer-row {
+.footer-content {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: 32px;
+  text-align: center;
 }
 
 .footer-logo {
-  font-weight: 800;
-  font-size: 20px;
-  letter-spacing: -0.02em;
+  display: inline-block;
 }
 
-.footer-copy {
-  font-size: 13px;
-  color: var(--text-dim);
-  margin-top: 4px;
+.footer-svg {
+  width: 100px;
+  height: auto;
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.3s ease;
+}
+
+.footer-logo:hover .footer-svg {
+  color: var(--text-main);
 }
 
 .footer-links {
   display: flex;
-  gap: 24px;
+  gap: 32px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .footer-links a {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
+  font-weight: 500;
+  transition: color 0.2s ease;
 }
 
 .footer-links a:hover {
   color: var(--text-main);
+}
+
+@media (max-width: 600px) {
+    .footer-links {
+        gap: 20px;
+        flex-direction: column; /* Stack on very small screens? or keep row? row is fine usually */
+        flex-direction: row; 
+    }
 }
 
 /* -- Animations -- */
@@ -1546,15 +1658,139 @@ button {
     text-align: left;
   }
 
+  /* Move image below content on mobile? Or above?
+     Default flex/grid flow is image second. 
+     If we want image first, use order: -1.
+     "Just drop it" title reads better first, then image, then checks.
+  */
   .split-image {
-    order: -1;
+    /* order: -1;  Let's keep text first for storytelling */
   }
 
   .hero-title {
-    font-size: 3.5rem;
+    font-size: 3rem;
   }
 
   .pricing-card {
     padding: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Pricing Slider */
+  .pricing .container {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .pricing-grid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 16px;
+    padding-bottom: 60px; /* Increased for shadow */
+    margin-top: 40px;
+    padding-left: 24px;
+    padding-right: 24px;
+    padding-top: 60px; /* Increased for hover animation */
+    
+    /* Ensure scroll starts correctly */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Hide scrollbar */
+  }
+  
+  .pricing-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pricing-plan {
+    min-width: 85vw; /* Almost full width */
+    scroll-snap-align: center;
+    /* Ensure shadow is not clipped by bottom */
+    margin-bottom: 30px; 
+    margin: 0 0 30px 0;
+  }
+
+  .pricing-card {
+      /* Move shadow up slightly so it is not cut off by container bottom */
+      box-shadow: 0 8px 24px -6px rgba(0,0,0,0.4); 
+  }
+
+  /* Reorder Pro to first (REMOVED: User wants Free on left, but Pro shown first. 
+     We will handle this by keeping default order [Free, Pro] and scrolling to Pro via JS) */
+  /* .pricing-plan-pro {
+    order: -1;
+  } */
+
+  /* Download Buttons */
+  .download-grid {
+    flex-direction: column;
+    padding: 0 24px;
+    gap: 12px;
+  }
+
+  .download-tile {
+    width: 100%;
+    height: auto;
+    padding: 16px 24px;
+    flex-direction: row; 
+    justify-content: flex-start;
+    border-radius: 16px;
+  }
+  
+  .download-tile .os-icon {
+    width: 28px;
+    height: 28px;
+    margin-right: 16px;
+  }
+  
+  .download-tile span {
+    font-size: 16px;
+  }
+  
+  .download-tile .small {
+    margin-left: auto; /* Push to right on mobile row */
+    margin-top: 0;
+  }
+
+  /* Preview Section */
+  .demo-body {
+    padding: 20px;
+  }
+  .demo-header {
+      padding: 10px 16px;
+  }
+  .demo-input-group {
+    flex-direction: column;
+  }
+  .demo-input {
+      width: 100%;
+  }
+  .demo-icon-btn {
+      width: 100%; /* Full width button on mobile */
+      margin-top: 8px; /* space between input and button */
+  }
+  
+  .demo-footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  
+  .demo-footer .btn {
+      grid-column: span 2; /* Button takes full width below selects */
+      justify-content: center;
+  }
+
+  /* Hero adjustments */
+  .hero-buttons {
+      flex-direction: column;
+      width: 100%;
+      padding: 0 40px;
+  }
+  
+  .hero-buttons .btn {
+      width: 100%;
+      justify-content: center;
   }
 }
