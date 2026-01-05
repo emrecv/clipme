@@ -40,11 +40,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/yt-dlp",
-      "binaries/ffmpeg",
-      "binaries/ffprobe"
-    ]
+    "externalBin": ["binaries/yt-dlp", "binaries/ffmpeg", "binaries/ffprobe"]
   },
   "plugins": {
     "updater": {
@@ -54,7 +50,7 @@
       ]
     },
     "deep-link": {
-       "schemes": ["clipme"]
+      "schemes": ["clipme"]
     }
   }
 }

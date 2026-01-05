@@ -937,6 +937,72 @@ button {
   font-size: 15px;
 }
 
+/* -- Reversed Split Layout (Image Left, Text Right) -- */
+.split-layout-reversed {
+  grid-template-columns: 1.4fr 0.6fr;
+  margin-top: 120px;
+}
+
+@media (max-width: 800px) {
+  .split-layout-reversed {
+    grid-template-columns: 1fr;
+    margin-top: 80px;
+  }
+  
+  .split-layout-reversed .split-image {
+    order: -1; /* Image goes on top on mobile */
+  }
+}
+
+/* Alternative Gradient for Multi-Clip Section */
+.split-image-alt {
+  background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+  background-size: 200% 200%;
+  animation: gradientBorder 4s ease infinite;
+}
+
+.split-image-alt::before {
+  background: linear-gradient(
+    135deg,
+    #667eea,
+    #764ba2,
+    #f093fb,
+    #667eea
+  );
+}
+
+/* Pro Feature Badge */
+.pro-feature-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, rgba(255, 214, 10, 0.15), rgba(255, 159, 10, 0.15));
+  border: 1px solid rgba(255, 214, 10, 0.3);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+
+.pro-feature-badge svg {
+  color: var(--primary);
+}
+
+/* Alternative Icon Box for Multi-Clip */
+.icon-box-alt {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+  border-color: rgba(102, 126, 234, 0.3);
+  color: #a78bfa;
+}
+
+.icon-box-alt svg {
+  color: #a78bfa;
+}
+
 /* -- Pricing -- */
 .pricing {
   /* Increased padding to accommodate the angled cut without clipping content */
