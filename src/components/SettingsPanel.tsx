@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
+import { check } from '@tauri-apps/plugin-updater';
+import { ask } from '@tauri-apps/plugin-dialog';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { useAuth } from '../contexts/AuthContext';
 import { account } from '../lib/appwrite';
 
@@ -32,12 +36,39 @@ export function SettingsPanel({
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [version, setVersion] = useState('');
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       invoke<LicenseInfo>('get_license_status').then(setLicenseInfo).catch(console.error);
+      getVersion().then(setVersion).catch(console.error);
     }
   }, [isOpen]);
+
+  const handleCheckUpdate = async () => {
+      setIsCheckingUpdate(true);
+      try {
+          const update = await check();
+          if (update) {
+              const yes = await ask(
+                `Clipme v${update.version} is available!\n\nRelease Notes:\n${update.body}`, 
+                { title: 'Update Available', kind: 'info', okLabel: 'Update Now', cancelLabel: 'Later' }
+              );
+              if (yes) {
+                await update.downloadAndInstall();
+                await relaunch();
+              }
+          } else {
+              await ask('You are on the latest version.', { title: 'No Update Available', kind: 'info', okLabel: 'OK' });
+          }
+      } catch (e) {
+          console.error(e);
+          // await ask(`Failed to check for updates: ${e}`, { title: 'Error', kind: 'error' });
+      } finally {
+          setIsCheckingUpdate(false);
+      }
+  };
 
   const { user, checkSession } = useAuth();
 
@@ -219,8 +250,29 @@ export function SettingsPanel({
             )}
           </div>
 
-          {/* Developer Section */}
-          <div className="settings-section" style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+            {/* Application Section */}
+            <div className="settings-section">
+              <h3>About</h3>
+              <div className="license-status-card">
+                 <div className="license-status-row">
+                    <span className="license-label">Version</span>
+                    <span className="license-key-display">v{version}</span>
+                 </div>
+                 <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button 
+                      className="settings-button primary"
+                      onClick={handleCheckUpdate}
+                      disabled={isCheckingUpdate}
+                      style={{ fontSize: '0.8rem', padding: '0.6rem 1rem' }}
+                    >
+                      {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
+                    </button>
+                 </div>
+              </div>
+            </div>
+
+            {/* Developer Section */}
+            <div className="settings-section" style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
             <h3 style={{ color: '#ff6b6b' }}>Danger Zone</h3>
             <p className="settings-hint" style={{ marginBottom: '1rem' }}>
               Only use this if you are experiencing issues. This will reset all local data.

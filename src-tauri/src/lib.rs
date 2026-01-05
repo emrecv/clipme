@@ -8,6 +8,30 @@ use tauri::AppHandle;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri::State;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+/// Helper to create a command that doesn't spawn a visible window on Windows
+fn create_windowless_command(program: &std::path::Path) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
+// Helper allowing string paths too (for system commands)
+fn create_windowless_command_str(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
 
 struct AppState {
     download_pid: Mutex<Option<u32>>,
@@ -110,7 +134,7 @@ async fn get_video_metadata(app: AppHandle, url: String) -> Result<VideoMetadata
         println!("Detected local file: {:?}", path);
 
         // Use ffprobe to get metadata
-        let output = Command::new(&ffprobe_path)
+        let output = create_windowless_command(&ffprobe_path)
             .args(&[
                 "-v",
                 "quiet",
@@ -194,7 +218,7 @@ async fn get_video_metadata(app: AppHandle, url: String) -> Result<VideoMetadata
     let is_youtube = url.contains("youtube.com") || url.contains("youtu.be");
 
     let output = if is_youtube {
-        Command::new(&ytdlp_path)
+        create_windowless_command(&ytdlp_path)
             .args(&["--dump-json", "--flat-playlist", "--no-warnings", &url])
             .output()
             .map_err(|e| format!("Failed to execute yt-dlp: {}", e))?
@@ -207,7 +231,7 @@ async fn get_video_metadata(app: AppHandle, url: String) -> Result<VideoMetadata
 
         println!("Downloading preview to: {}", template_str);
 
-        Command::new(&ytdlp_path)
+        create_windowless_command(&ytdlp_path)
             .args(&[
                 "--print-json",
                 "--no-warnings",
@@ -565,11 +589,11 @@ async fn cancel_download(state: State<'_, AppState>) -> Result<(), String> {
         println!("Killing process {}", pid);
         #[cfg(not(windows))]
         {
-            let _ = Command::new("kill").arg(pid.to_string()).output();
+            let _ = create_windowless_command_str("kill").arg(pid.to_string()).output();
         }
         #[cfg(windows)]
         {
-            let _ = Command::new("taskkill")
+            let _ = create_windowless_command_str("taskkill")
                 .args(&["/F", "/PID", &pid.to_string()])
                 .output();
         }
@@ -834,7 +858,7 @@ async fn download_clip(
 
         println!("Running FFmpeg: {:?}", ffmpeg_args);
 
-        let mut child = Command::new(&ffmpeg_path)
+        let mut child = create_windowless_command(&ffmpeg_path)
             .args(&ffmpeg_args)
             .stderr(Stdio::piped())
             .spawn()
@@ -950,7 +974,7 @@ async fn download_clip(
 
     args.push(url);
 
-    let mut child = Command::new(&ytdlp_path)
+    let mut child = create_windowless_command(&ytdlp_path)
         .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1105,7 +1129,7 @@ async fn download_clip(
             &final_path,
         ];
 
-        let mut transcode_child = Command::new(&ffmpeg_path)
+        let mut transcode_child = create_windowless_command(&ffmpeg_path)
             .args(&ffmpeg_args)
             .stderr(Stdio::piped())
             .spawn()

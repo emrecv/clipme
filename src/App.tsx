@@ -12,6 +12,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { Celebration } from './components/Celebration';
 import { FileDropZone } from './components/FileDropZone';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { check } from '@tauri-apps/plugin-updater';
@@ -53,6 +54,8 @@ interface AppSettings {
 const FREE_QUALITIES = ['720p', '480p', 'Audio Only'];
 
 function App() {
+  const [version, setVersion] = useState('');
+  const [loadingVersion, setLoadingVersion] = useState(true);
   const [loading, setLoading] = useState(false);
   const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
   const [range, setRange] = useState<[number, number]>([0, 0]);
@@ -87,6 +90,11 @@ function App() {
   }, []);
 
   useEffect(() => {
+    getVersion().then((v) => {
+        setVersion(v);
+        setLoadingVersion(false);
+    });
+
     // Ping Appwrite to verify connection (for Onboarding Wizard)
     try {
         // @ts-ignore
@@ -607,7 +615,7 @@ function App() {
       <div className="bottom-bar">
         <div className="version-badge">
           <img src="/stars.svg" alt="" width="14" height="14" />
-          <span>v1.0</span>
+          <span>{loadingVersion ? '...' : `v${version}`}</span>
         </div>
 
         <div className="bottom-bar-right">
