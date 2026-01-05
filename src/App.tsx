@@ -762,7 +762,6 @@ function App() {
         <div 
           className="version-badge" 
           onClick={checkForUpdates}
-          style={{ cursor: 'pointer' }}
           title="Check for updates"
         >
           <img src="/stars.svg" alt="" width="14" height="14" />

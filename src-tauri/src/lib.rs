@@ -13,7 +13,8 @@ use std::os::windows::process::CommandExt;
 
 /// Helper to create a command that doesn't spawn a visible window on Windows
 fn create_windowless_command(program: &std::path::Path) -> Command {
-    let cmd = Command::new(program);
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -24,7 +25,8 @@ fn create_windowless_command(program: &std::path::Path) -> Command {
 
 // Helper allowing string paths too (for system commands)
 fn create_windowless_command_str(program: &str) -> Command {
-    let cmd = Command::new(program);
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -1314,7 +1316,7 @@ async fn download_multi_clip(
 
         if is_local_file {
             // Local file: use FFmpeg directly
-            let mut ffmpeg_args = vec![
+            let ffmpeg_args = vec![
                 "-y".to_string(),
                 "-i".to_string(),
                 url.clone(),
@@ -1611,7 +1613,7 @@ async fn open_file_location(path: String) -> Result<(), String> {
         return Err("File not found".to_string());
     }
     
-    let parent = path.parent().unwrap_or(path);
+    let _parent = path.parent().unwrap_or(path);
     
     #[cfg(target_os = "macos")]
     {
