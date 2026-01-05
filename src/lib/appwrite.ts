@@ -6,6 +6,12 @@ export const client = new Client();
 const PROJECT_ID = import.meta.env.VITE_APPWRITE_PROJECT_ID;
 const ENDPOINT = import.meta.env.VITE_APPWRITE_ENDPOINT;
 
+if (!PROJECT_ID || !ENDPOINT) {
+  console.error("Critical: Appwrite environment variables are missing!");
+  // This will be caught by our new window.onerror handler in index.html
+  throw new Error("Appwrite Configuration Missing. VITE_APPWRITE_PROJECT_ID or VITE_APPWRITE_ENDPOINT is undefined.");
+}
+
 client
     .setEndpoint(ENDPOINT)
     .setProject(PROJECT_ID);
