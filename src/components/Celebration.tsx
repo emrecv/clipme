@@ -21,9 +21,10 @@ export function Celebration({ show, onComplete }: CelebrationProps) {
     setVisible(true);
 
     // Create confetti instance on our canvas
+    // Note: useWorker disabled for Windows compatibility
     const myConfetti = confetti.create(canvasRef.current, {
       resize: true,
-      useWorker: true,
+      useWorker: false,
     });
 
     // Epic confetti sequence

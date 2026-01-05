@@ -15,11 +15,37 @@ struct AppState {
     current_file_path: Mutex<Option<PathBuf>>,
 }
 
+/// Get the target triple for the current platform
+fn get_target_triple() -> &'static str {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    { "aarch64-apple-darwin" }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    { "x86_64-apple-darwin" }
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    { "x86_64-pc-windows-msvc" }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    { "x86_64-unknown-linux-gnu" }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    { "aarch64-unknown-linux-gnu" }
+}
+
+/// Get the file extension for executables on the current platform
+fn get_exe_extension() -> &'static str {
+    #[cfg(target_os = "windows")]
+    { ".exe" }
+    #[cfg(not(target_os = "windows"))]
+    { "" }
+}
+
 /// Get the path to a bundled sidecar binary.
-/// Tauri automatically appends the platform-specific suffix and extension.
+/// Tauri requires binaries to be named with -$TARGET_TRIPLE suffix.
 fn get_sidecar_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+    let target_triple = get_target_triple();
+    let exe_ext = get_exe_extension();
+    let binary_name = format!("{}-{}{}", name, target_triple, exe_ext);
+    
     app.path()
-        .resolve(format!("binaries/{}", name), tauri::path::BaseDirectory::Resource)
+        .resolve(format!("binaries/{}", binary_name), tauri::path::BaseDirectory::Resource)
         .map_err(|e| format!("Failed to resolve {} path: {}", name, e))
 }
 
