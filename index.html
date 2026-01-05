@@ -39,7 +39,7 @@
           100% { opacity: 0.5; transform: scale(0.95); }
         }
       </style>
-      <div class="loading-container">
+      <div class="loading-container" id="loading-screen">
         <!-- SVG Logo inline to ensure it loads INSTANTLY -->
         <svg class="loading-logo" viewBox="0 0 360 125" fill="none">
           <path d="M332.464 101.64C315.384 101.64 302.504 87.22 302.504 65.66C302.504 44.66 315.104 29.54 331.484 29.54C346.184 29.54 356.404 41.44 359.204 58.24L316.364 70.28C319.304 83.02 327.284 91.14 337.924 91.14C345.064 91.14 351.784 87.36 356.824 80.64L358.784 84.84C353.884 93.66 345.204 101.64 332.464 101.64ZM315.104 59.08C315.104 61.04 315.244 63 315.384 64.96L345.064 56.42C343.244 45.22 337.924 35.42 329.244 35.42C320.984 35.42 315.104 44.1 315.104 59.08Z" fill="white"/>
@@ -52,6 +52,71 @@
         <div class="loading-text">Initializing...</div>
       </div>
     </div>
+    <script>
+      // GLOBAL ERROR HANDLING & DEADMAN SWITCH
+      (function() {
+        var LOAD_TIMEOUT_MS = 8000;
+        var appLoaded = false;
+        var loadingScreen = document.getElementById('loading-screen');
+        
+        // 1. Deadman Switch: If app doesn't load in X seconds, show fail screen
+        var timeoutId = setTimeout(function() {
+          if (!appLoaded) {
+            showFatalError("App Timeout: React failed to mount within " + (LOAD_TIMEOUT_MS/1000) + "s", "Likely a Javascript syntax error or module load failure.");
+          }
+        }, LOAD_TIMEOUT_MS);
+
+        // 2. Global Function for React to call when ready
+        window.appLoaded = function() {
+          appLoaded = true;
+          clearTimeout(timeoutId);
+          if (loadingScreen) loadingScreen.style.display = 'none';
+          console.log("App loaded successfully!");
+        };
+
+        // 3. Global Error Handler (Script errors, SyntaxErrors)
+        window.onerror = function(msg, url, line, col, error) {
+          showFatalError(msg, "File: " + url + "\nLine: " + line + ":" + col + "\nStack: " + (error ? error.stack : 'N/A'));
+          return false; // let default handler run too
+        };
+
+        // 4. Unhandled Promise Rejections (Async errors)
+        window.onunhandledrejection = function(event) {
+          console.error("Unhandled Rejection:", event.reason);
+          // Optional: Show error if it looks critical, but maybe too noisy
+        };
+
+        function showFatalError(title, details) {
+          if (appLoaded) return; // Don't override if app is already running
+          
+          document.body.innerHTML = `
+            <div style="
+              position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+              background: #1a1a1a; color: white;
+              padding: 40px; font-family: monospace;
+              display: flex; flex-direction: column;
+              align-items: flex-start; justify-content: center;
+              z-index: 99999;
+            ">
+              <h1 style="color: #ff5555; margin-bottom: 20px;">Startup Failure</h1>
+              <h2 style="font-size: 18px; margin-bottom: 10px; opacity: 0.9;">${title}</h2>
+              <pre style="
+                background: #333; padding: 20px; border-radius: 8px;
+                width: 100%; overflow: auto; color: #ddd;
+                white-space: pre-wrap; word-break: break-all;
+                border: 1px solid #555;
+              ">${details}</pre>
+              <button onclick="window.location.reload()" style="
+                margin-top: 30px; padding: 12px 24px;
+                background: #E5C009; color: black; border: none;
+                font-weight: bold; font-size: 16px; cursor: pointer;
+                border-radius: 4px;
+              ">Try Reload</button>
+            </div>
+          `;
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
