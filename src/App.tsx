@@ -126,7 +126,16 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Timeout fallback - if backend doesn't respond in 5 seconds, show welcome screen
+    const timeout = setTimeout(() => {
+      if (showWelcome === null) {
+        console.warn('Backend initialization timeout - showing welcome screen');
+        setShowWelcome(true);
+      }
+    }, 5000);
+
     invoke<boolean>('check_onboarding_complete').then((complete) => {
+      clearTimeout(timeout);
       setShowWelcome(!complete);
       if (complete) {
         check().then(async (update) => {
@@ -157,9 +166,13 @@ function App() {
           }).catch(console.error);
         }).catch(console.error);
       }
-    }).catch(() => {
+    }).catch((err) => {
+      clearTimeout(timeout);
+      console.error('Onboarding check failed:', err);
       setShowWelcome(true);
     });
+
+    return () => clearTimeout(timeout);
   }, []);
 
   // Sync license from account to local globally
@@ -354,7 +367,24 @@ function App() {
     setShowWelcome(false);
   };
 
-  if (showWelcome === null) return null;
+  // Show loading screen while initializing
+  if (showWelcome === null) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'var(--bg-primary, #0a0a0a)',
+        color: 'white',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <img src="/clipme-logo-white.svg" alt="Clipme" style={{ height: '48px', opacity: 0.8 }} />
+        <div style={{ fontSize: '0.9rem', opacity: 0.6 }}>Loading...</div>
+      </div>
+    );
+  }
 
   const handleLogout = async () => {
     try {
