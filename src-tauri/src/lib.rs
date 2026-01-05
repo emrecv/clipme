@@ -18,50 +18,64 @@ struct AppState {
 /// Get the target triple for the current platform
 fn get_target_triple() -> &'static str {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    { "aarch64-apple-darwin" }
+    return "aarch64-apple-darwin";
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    { "x86_64-apple-darwin" }
+    return "x86_64-apple-darwin";
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    { "x86_64-pc-windows-msvc" }
+    return "x86_64-pc-windows-msvc";
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    { "x86_64-unknown-linux-gnu" }
+    return "x86_64-unknown-linux-gnu";
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    { "aarch64-unknown-linux-gnu" }
+    return "aarch64-unknown-linux-gnu";
 }
 
 /// Get the file extension for executables on the current platform
 fn get_exe_extension() -> &'static str {
     #[cfg(target_os = "windows")]
-    { ".exe" }
+    return ".exe";
     #[cfg(not(target_os = "windows"))]
-    { "" }
+    return "";
 }
 
-/// Get the path to a bundled sidecar binary.
-/// Tauri requires binaries to be named with -$TARGET_TRIPLE suffix.
-fn get_sidecar_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+/// Get the path to a bundled sidecar binary, or fall back to system PATH.
+/// Returns the bundled binary path if it exists, otherwise returns just the binary name
+/// so it will be looked up in the system PATH.
+fn get_binary_path(app: &AppHandle, name: &str) -> PathBuf {
     let target_triple = get_target_triple();
     let exe_ext = get_exe_extension();
     let binary_name = format!("{}-{}{}", name, target_triple, exe_ext);
     
-    app.path()
-        .resolve(format!("binaries/{}", binary_name), tauri::path::BaseDirectory::Resource)
-        .map_err(|e| format!("Failed to resolve {} path: {}", name, e))
+    // Try to resolve the bundled binary path
+    if let Ok(path) = app.path().resolve(
+        format!("binaries/{}", binary_name),
+        tauri::path::BaseDirectory::Resource
+    ) {
+        // Check if the file actually exists
+        if path.exists() {
+            println!("Using bundled binary: {:?}", path);
+            return path;
+        }
+    }
+    
+    // Fallback: use system PATH
+    let system_name = format!("{}{}", name, exe_ext);
+    println!("Bundled binary not found, falling back to system: {}", system_name);
+    PathBuf::from(system_name)
 }
 
-/// Get the yt-dlp binary path
-fn get_ytdlp_path(app: &AppHandle) -> Result<PathBuf, String> {
-    get_sidecar_path(app, "yt-dlp")
+/// Get the yt-dlp binary path (bundled or system)
+fn get_ytdlp_path(app: &AppHandle) -> PathBuf {
+    get_binary_path(app, "yt-dlp")
 }
 
-/// Get the ffmpeg binary path  
-fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
-    get_sidecar_path(app, "ffmpeg")
+/// Get the ffmpeg binary path (bundled or system)
+fn get_ffmpeg_path(app: &AppHandle) -> PathBuf {
+    get_binary_path(app, "ffmpeg")
 }
 
-/// Get the ffprobe binary path (bundled alongside ffmpeg)
-fn get_ffprobe_path(app: &AppHandle) -> Result<PathBuf, String> {
-    get_sidecar_path(app, "ffprobe")
+/// Get the ffprobe binary path (bundled or system)
+fn get_ffprobe_path(app: &AppHandle) -> PathBuf {
+    get_binary_path(app, "ffprobe")
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -86,9 +100,9 @@ pub struct DownloadProgress {
 async fn get_video_metadata(app: AppHandle, url: String) -> Result<VideoMetadata, String> {
     println!("Fetching metadata for: {}", url);
 
-    // Get sidecar paths
-    let ffprobe_path = get_ffprobe_path(&app)?;
-    let ytdlp_path = get_ytdlp_path(&app)?;
+    // Get binary paths (bundled or system fallback)
+    let ffprobe_path = get_ffprobe_path(&app);
+    let ytdlp_path = get_ytdlp_path(&app);
 
     // Check if input is a local file
     let path = std::path::Path::new(&url);
@@ -679,9 +693,9 @@ async fn download_clip(
         url, start, end, quality, format, id
     );
 
-    // Get sidecar paths
-    let ffmpeg_path = get_ffmpeg_path(&app)?;
-    let ytdlp_path = get_ytdlp_path(&app)?;
+    // Get binary paths (bundled or system fallback)
+    let ffmpeg_path = get_ffmpeg_path(&app);
+    let ytdlp_path = get_ytdlp_path(&app);
 
     let safe_title = sanitize_filename(&title);
     let timestamp = std::time::SystemTime::now()
