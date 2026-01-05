@@ -1,259 +1,470 @@
-import React, { useState, useEffect, useRef } from 'react';
-import ReactPlayer from 'react-player';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { Play, Pause, Volume2, VolumeX, AlertCircle } from 'lucide-react';
+import 'media-chrome';
+import { AlertCircle } from 'lucide-react';
 
-interface VideoPreviewProps {
-  url: string; 
-  previewUrl?: string; 
+// Type declarations for media-chrome custom elements need to be in the global module scope
+// Using separate declaration file or module augmentation
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
+      'media-controller': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
+        audio?: boolean;
+        class?: string;
+      }, HTMLElement>;
+      'media-control-bar': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
+        class?: string;
+      }, HTMLElement>;
+      'media-play-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'media-seek-backward-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
+        seekoffset?: number;
+      }, HTMLElement>;
+      'media-seek-forward-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
+        seekoffset?: number;
+      }, HTMLElement>;
+      'media-mute-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'media-volume-range': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'media-time-range': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'media-time-display': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
+        showduration?: boolean;
+      }, HTMLElement>;
+      'media-fullscreen-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'media-pip-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'media-loading-indicator': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+    }
+  }
 }
 
-export const VideoPreview: React.FC<VideoPreviewProps> = ({ url, previewUrl }) => {
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [hovering, setHovering] = useState(false);
-  const [progress, setProgress] = useState(0); // 0-100
-  const [duration, setDuration] = useState(0); // seconds
-  const [currentTime, setCurrentTime] = useState(0); // seconds
-  const [ready, setReady] = useState(false);
-  const [hasError, setHasError] = useState(false);
+interface VideoPreviewProps {
+  url: string;
+  previewUrl?: string;
+}
 
+// Social URL detection
+const getVideoType = (url: string): 'youtube' | 'instagram' | 'tiktok' | 'local' => {
+  if (!url) return 'local';
+  const trimmed = url.trim().toLowerCase();
+  
+  if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
+    return 'youtube';
+  }
+  if (trimmed.includes('instagram.com')) {
+    return 'instagram';
+  }
+  if (trimmed.includes('tiktok.com')) {
+    return 'tiktok';
+  }
+  return 'local';
+};
+
+// Extract YouTube video ID
+const getYouTubeVideoId = (url: string): string | null => {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+};
+
+// Extract Instagram post ID
+const getInstagramPostId = (url: string): string | null => {
+  const pattern = /instagram\.com\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/;
+  const match = url.match(pattern);
+  return match ? match[1] : null;
+};
+
+// Extract TikTok video ID
+const getTikTokVideoId = (url: string): string | null => {
+  const pattern = /tiktok\.com\/@[^\/]+\/video\/(\d+)/;
+  const match = url.match(pattern);
+  return match ? match[1] : null;
+};
+
+// Ensure URL has protocol
+const ensureProtocol = (url: string): string => {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+  if (/^[\w\-]+(\.[\w\-]+)+/.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+};
+
+// YouTube Embed Component
+const YouTubeEmbed: React.FC<{ videoId: string }> = ({ videoId }) => {
+  return (
+    <div className="video-embed-container">
+      <iframe
+        src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
+        title="YouTube video player"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        className="video-embed-iframe"
+      />
+      <style>{embedStyles}</style>
+    </div>
+  );
+};
+
+// Instagram Embed Component
+const InstagramEmbed: React.FC<{ postId: string }> = ({ postId }) => {
+  useEffect(() => {
+    // Load Instagram embed script
+    const script = document.createElement('script');
+    script.src = 'https://www.instagram.com/embed.js';
+    script.async = true;
+    document.body.appendChild(script);
+    
+    // Process embeds when script loads
+    script.onload = () => {
+      if ((window as any).instgrm) {
+        (window as any).instgrm.Embeds.process();
+      }
+    };
+    
+    return () => {
+      script.remove();
+    };
+  }, [postId]);
+  
+  return (
+    <div className="video-embed-container instagram-embed">
+      <blockquote
+        className="instagram-media"
+        data-instgrm-captioned
+        data-instgrm-permalink={`https://www.instagram.com/p/${postId}/`}
+        data-instgrm-version="14"
+        style={{
+          background: '#000',
+          border: 0,
+          borderRadius: '12px',
+          margin: 0,
+          maxWidth: '100%',
+          minWidth: '100%',
+          padding: 0,
+          width: '100%',
+        }}
+      />
+      <style>{embedStyles}</style>
+    </div>
+  );
+};
+
+// TikTok Embed Component
+const TikTokEmbed: React.FC<{ url: string }> = ({ url }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<any>(null);
-
-  // --- Source Detection ---
-  const isYouTube = /^(https?:\/\/)?(www\.|m\.)?(youtube\.com|youtu\.be)\/.+$/i.test(url);
-  
-  // For YouTube, always use the main URL (ReactPlayer handles it best).
-  // For local files, use previewUrl or url.
-  const sourceUrl = isYouTube 
-    ? url 
-    : (previewUrl || url);
-  
-  // Convert local paths to asset-protocol URLs on Windows/Mac
-  const isLocalFile = !isYouTube && !sourceUrl.startsWith('http') && !sourceUrl.startsWith('blob');
-  const finalPlayableUrl = isLocalFile ? convertFileSrc(sourceUrl) : sourceUrl;
   
   useEffect(() => {
-    // Reset state on URL change
-    setHasError(false);
-    setPlaying(false);
-    setProgress(0);
-    setDuration(0);
-    setCurrentTime(0);
-    setReady(false);
-  }, [url, previewUrl]);
-
-  // --- Handlers ---
-  const handlePlayPause = () => setPlaying(!playing);
-  const handleMuteToggle = () => setMuted(!muted);
+    // Load TikTok embed script
+    const script = document.createElement('script');
+    script.src = 'https://www.tiktok.com/embed.js';
+    script.async = true;
+    document.body.appendChild(script);
+    
+    return () => {
+      script.remove();
+    };
+  }, [url]);
   
-  const handleProgress = (state: { played: number, playedSeconds: number }) => {
-    // User dragging overrides updates? No, we just visual sync
-    if (!seeking.current) {
-        setProgress(state.played * 100);
-        setCurrentTime(state.playedSeconds);
-    }
-  };
+  return (
+    <div className="video-embed-container tiktok-embed" ref={containerRef}>
+      <blockquote
+        className="tiktok-embed"
+        cite={ensureProtocol(url)}
+        data-video-id={getTikTokVideoId(url) || ''}
+        style={{
+          maxWidth: '100%',
+          minWidth: '100%',
+        }}
+      >
+        <section />
+      </blockquote>
+      <style>{embedStyles}</style>
+    </div>
+  );
+};
 
-  const handleDuration = (d: number) => {
-    setDuration(d);
-  };
+// Kibo UI Style Video Player using media-chrome
+const KiboPlayer: React.FC<{ src: string }> = ({ src }) => {
+  const [hasError, setHasError] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const handleError = (e: any) => {
-    console.error("VideoPlayer Error:", e);
+  useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
+  const handleError = () => {
+    console.error('Video playback error:', src);
     setHasError(true);
   };
 
-  const handleReady = () => {
-    setReady(true);
-    setHasError(false);
-  };
-
-  const seeking = useRef(false);
-  const seekTo = (percent: number) => {
-    const fraction = percent / 100;
-    const time = fraction * duration;
-    
-    // Optimistic UI
-    setProgress(percent);
-    setCurrentTime(time);
-    
-    if (playerRef.current) {
-        playerRef.current.seekTo(fraction, 'fraction');
-    }
-  };
-
-  const formatTime = (seconds: number) => {
-    if (!seconds || isNaN(seconds)) return "0:00";
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  if (!url) return null;
-
   if (hasError) {
     return (
-        <div 
-          className="video-player-container"
-          style={{ 
-            width: '100%', 
-            aspectRatio: '16/9', 
-            borderRadius: 'var(--radius)', 
-            overflow: 'hidden',
-            backgroundColor: '#000',
-            boxShadow: 'var(--shadow)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-secondary)',
-            gap: '1rem',
-            padding: '2rem',
-            textAlign: 'center'
-          }}
-        >
-            <AlertCircle size={48} color="var(--primary-color)" />
-            <div>
-                <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-color)' }}>Playback Error</h3>
-                <p style={{ margin: 0, fontSize: '0.9rem' }}>
-                    Unable to play this video.<br/>
-                    {isYouTube ? "Check internet connection." : "File format might not be supported."}
-                </p>
-            </div>
-        </div>
+      <div className="kibo-player kibo-player--error">
+        <AlertCircle size={32} className="kibo-player__error-icon" />
+        <p className="kibo-player__error-text">Video unavailable</p>
+        <style>{kiboStyles}</style>
+      </div>
     );
   }
 
   return (
-    <div 
-      className="video-player-container"
-      ref={containerRef}
-      style={{ 
-        width: '100%', 
-        position: 'relative', 
-        paddingTop: '56.25%', /* 16:9 Aspect Ratio */
-        borderRadius: 'var(--radius)', 
-        overflow: 'hidden',
-        backgroundColor: '#000',
-        boxShadow: 'var(--shadow)',
-      }}
-      onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => setHovering(false)}
-    >
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
-          <ReactPlayer
-            ref={playerRef}
-            url={finalPlayableUrl}
-            width="100%"
-            height="100%"
-            playing={playing}
-            muted={muted}
-            controls={false} // Custom controls
-            onReady={handleReady}
-            onProgress={(state: any) => handleProgress(state)}
-            onDuration={handleDuration}
-            onError={handleError}
-            onEnded={() => setPlaying(false)}
-            // YouTube specific configs
-            config={{
-                youtube: {
-                    playerVars: { showinfo: 0, modestbranding: 1, rel: 0 }
-                } as any
-            }}
-          />
-      </div>
-
-      {/* Click Overlay (Play/Pause) */}
-      <div 
-        style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
-          background: playing && !hovering ? 'transparent' : 'rgba(0,0,0,0.3)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          cursor: 'pointer',
-          transition: 'all 0.3s ease'
-        }}
-        onClick={handlePlayPause}
-      >
-         {(!playing || hovering) && ready && (
-            <div style={{
-              width: 64, height: 64,
-              borderRadius: '50%',
-              backgroundColor: 'rgba(255,255,255,0.1)',
-              backdropFilter: 'blur(8px)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
-              transform: hovering ? 'scale(1.1)' : 'scale(1)',
-              transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-            }}>
-               {playing ? 
-                 <Pause fill="white" size={32} stroke="none" /> : 
-                 <Play fill="white" size={32} stroke="none" style={{ marginLeft: 4 }} />
-               }
-            </div>
-         )}
-      </div>
-
-      {/* Custom Control Bar */}
-      <div style={{
-        position: 'absolute',
-        bottom: 0, left: 0, right: 0,
-        padding: '24px 16px 16px',
-        background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        opacity: (!playing || hovering) && ready ? 1 : 0,
-        transition: 'opacity 0.3s ease',
-        pointerEvents: (!playing || hovering) && ready ? 'auto' : 'none',
-      }}>
-         {/* Progress Line */}
-         <div 
-           style={{
-             width: '100%', height: 4,
-             background: 'rgba(255,255,255,0.2)',
-             borderRadius: 2,
-             position: 'relative',
-             cursor: 'pointer',
-           }}
-           className="progress-bar-hover"
-           onMouseDown={() => { seeking.current = true; }}
-           onMouseUp={() => { seeking.current = false; }}
-           onClick={(e) => {
-             e.stopPropagation();
-             const rect = e.currentTarget.getBoundingClientRect();
-             const p = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-             seekTo(p);
-           }}
-         >
-            <div style={{
-               position: 'absolute', left: 0, top: 0, bottom: 0,
-               width: `${progress}%`,
-               backgroundColor: 'var(--primary-color)',
-               borderRadius: 2,
-               boxShadow: '0 0 10px rgba(var(--primary-color-rgb), 0.5)'
-            }} />
-         </div>
-
-         {/* Buttons & Time */}
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-               <button onClick={(e) => { e.stopPropagation(); handlePlayPause(); }} className="icon-button-ghost">
-                  {playing ? <Pause size={20} color="white" /> : <Play size={20} color="white" />}
-               </button>
-               <button onClick={(e) => { e.stopPropagation(); handleMuteToggle(); }} className="icon-button-ghost">
-                  {muted ? <VolumeX size={20} color="white" /> : <Volume2 size={20} color="white" />}
-               </button>
-               <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', fontFamily: 'monospace' }}>
-                 {formatTime(currentTime)} / {formatTime(duration)}
-               </span>
-            </div>
-         </div>
-      </div>
+    <div className="kibo-player">
+      <media-controller class="kibo-media-controller">
+        <video
+          ref={videoRef}
+          slot="media"
+          src={src}
+          preload="metadata"
+          crossOrigin="anonymous"
+          onError={handleError}
+          className="kibo-video"
+        />
+        
+        <media-loading-indicator slot="centered-chrome" />
+        
+        <media-control-bar class="kibo-control-bar">
+          <media-play-button />
+          <media-time-range />
+          <media-time-display showduration />
+          <media-mute-button />
+          <media-volume-range />
+          <media-fullscreen-button />
+        </media-control-bar>
+      </media-controller>
+      <style>{kiboStyles}</style>
     </div>
   );
 };
+
+// Main VideoPreview Component
+export const VideoPreview: React.FC<VideoPreviewProps> = ({ url }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const videoData = useMemo(() => {
+    if (!url) return { type: 'local' as const, embedData: null, src: '' };
+    
+    const type = getVideoType(url);
+    
+    switch (type) {
+      case 'youtube': {
+        const videoId = getYouTubeVideoId(ensureProtocol(url));
+        return { type, embedData: videoId, src: '' };
+      }
+      case 'instagram': {
+        const postId = getInstagramPostId(ensureProtocol(url));
+        return { type, embedData: postId, src: '' };
+      }
+      case 'tiktok': {
+        return { type, embedData: url, src: '' };
+      }
+      case 'local':
+      default: {
+        let src = url;
+        // Convert local file paths
+        if (!url.startsWith('http') && !url.startsWith('blob:')) {
+          src = convertFileSrc(url);
+        }
+        return { type, embedData: null, src };
+      }
+    }
+  }, [url]);
+
+  if (!mounted) return null;
+
+  // YouTube Embed
+  if (videoData.type === 'youtube' && videoData.embedData) {
+    return <YouTubeEmbed videoId={videoData.embedData} />;
+  }
+
+  // Instagram Embed
+  if (videoData.type === 'instagram' && videoData.embedData) {
+    return <InstagramEmbed postId={videoData.embedData} />;
+  }
+
+  // TikTok Embed
+  if (videoData.type === 'tiktok' && videoData.embedData) {
+    return <TikTokEmbed url={videoData.embedData} />;
+  }
+
+  // Local Video with Kibo Player
+  return <KiboPlayer src={videoData.src} />;
+};
+
+// Embed container styles
+const embedStyles = `
+.video-embed-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.video-embed-container.instagram-embed,
+.video-embed-container.tiktok-embed {
+  aspect-ratio: auto;
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-embed-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.instagram-media {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+`;
+
+// Kibo Player styles (media-chrome styling)
+const kiboStyles = `
+.kibo-player {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.kibo-player--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.kibo-player__error-icon {
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.kibo-player__error-text {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+  margin: 0;
+}
+
+.kibo-media-controller {
+  width: 100%;
+  height: 100%;
+  display: block;
+  --media-primary-color: #fff;
+  --media-secondary-color: rgba(255, 255, 255, 0.7);
+  --media-control-background: transparent;
+  --media-control-hover-background: rgba(255, 255, 255, 0.1);
+  --media-range-track-height: 4px;
+  --media-range-track-background: rgba(255, 255, 255, 0.2);
+  --media-range-bar-color: #fff;
+  --media-range-thumb-width: 12px;
+  --media-range-thumb-height: 12px;
+  --media-range-thumb-background: #fff;
+  --media-range-thumb-border-radius: 50%;
+  --media-font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --media-font-size: 12px;
+  --media-button-icon-width: 18px;
+  --media-button-icon-height: 18px;
+  --media-control-padding: 10px;
+  --media-time-range-buffered-color: rgba(255, 255, 255, 0.3);
+  --media-icon-color: rgba(255, 255, 255, 0.85);
+  border-radius: 12px;
+}
+
+.kibo-media-controller:hover {
+  --media-icon-color: #fff;
+}
+
+.kibo-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.kibo-control-bar {
+  padding: 16px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  gap: 8px;
+}
+
+/* Custom styling for controls */
+media-controller {
+  --media-background-color: transparent;
+}
+
+media-control-bar {
+  --media-control-background: transparent;
+}
+
+media-play-button,
+media-seek-backward-button,
+media-seek-forward-button,
+media-mute-button,
+media-pip-button,
+media-fullscreen-button {
+  border-radius: 6px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+media-play-button:hover,
+media-seek-backward-button:hover,
+media-seek-forward-button:hover,
+media-mute-button:hover,
+media-pip-button:hover,
+media-fullscreen-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+media-time-range {
+  flex: 1;
+  height: 20px;
+}
+
+media-volume-range {
+  width: 60px;
+}
+
+media-time-display {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+media-loading-indicator {
+  --media-loading-icon-width: 48px;
+  --media-loading-icon-height: 48px;
+}
+
+/* Center play button styling */
+media-controller::part(center-play-button) {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+`;

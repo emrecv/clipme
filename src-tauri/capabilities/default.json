@@ -7,6 +7,8 @@
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-always-on-top",
     "opener:default",
     "dialog:default",
     "store:default",
@@ -23,6 +25,7 @@
         "/Users/**"
       ]
     },
-    "deep-link:default"
+    "deep-link:default",
+    "updater:default"
   ]
 }

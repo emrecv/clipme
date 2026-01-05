@@ -57,9 +57,8 @@ export function ProBadge({ isPro, onProActivated }: ProBadgeProps) {
 
   if (isPro) {
     return (
-      <div className="pro-badge-inline">
-        <img src="/pro-star-icon-main.svg" alt="" width="18" height="18" />
-        <span>Pro</span>
+      <div className="pro-badge-status">
+        <span className="pro-text-gradient">Pro</span>
       </div>
     );
   }

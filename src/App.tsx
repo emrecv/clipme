@@ -11,6 +11,10 @@ import { ProBadge } from './components/ProBadge';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Celebration } from './components/Celebration';
 import { FileDropZone } from './components/FileDropZone';
+import { TitlebarActions } from './components/TitlebarActions';
+import { DownloadHistory } from './components/DownloadHistory';
+import { MultiClipTimeline, ClipSegment } from './components/MultiClipTimeline';
+
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
@@ -20,7 +24,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { useAuth } from './contexts/AuthContext';
 import { AuthModal } from './components/AuthModal';
-import { account } from './lib/appwrite';
+import { account, client } from './lib/appwrite';
 
 interface VideoMetadata {
   title: string;
@@ -56,6 +60,34 @@ const FREE_QUALITIES = ['720p', '480p', 'Audio Only'];
 function App() {
   const [version, setVersion] = useState('');
   const [loadingVersion, setLoadingVersion] = useState(true);
+
+  const checkForUpdates = async () => {
+    try {
+      setLoadingVersion(true);
+      const update = await check();
+      
+      if (update?.available) {
+        const yes = await ask(`Update to ${update.version} is available!\n\n${update.body}`, {
+          title: 'Update Available',
+          kind: 'info',
+          okLabel: 'Update',
+          cancelLabel: 'Cancel'
+        });
+        
+        if (yes) {
+          await update.downloadAndInstall();
+          await relaunch();
+        }
+      } else {
+        showToast('Clipme is up to date 🚀', 'success');
+      }
+    } catch (error) {
+      console.error('Update check failed:', error);
+      showToast('Update check failed', 'error');
+    } finally {
+      setLoadingVersion(false);
+    }
+  };
   const [loading, setLoading] = useState(false);
   const [videoMeta, setVideoMeta] = useState<VideoMetadata | null>(null);
   const [range, setRange] = useState<[number, number]>([0, 0]);
@@ -70,12 +102,17 @@ function App() {
   const [isPro, setIsPro] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [preferredQuality, setPreferredQuality] = useState<string | null>(null);
   
   // New state for local files
   const [isLocalFile, setIsLocalFile] = useState(false);
   const [originalResolution, setOriginalResolution] = useState<string | null>(null);
   const [containerFormat, setContainerFormat] = useState('mp4');
+  
+  // Multi-Clip Mode (Pro feature)
+  const [multiClipEnabled, setMultiClipEnabled] = useState(false);
+  const [segments, setSegments] = useState<ClipSegment[]>([]);
   
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -314,16 +351,63 @@ function App() {
     }
     
     try {
-      await invoke('download_clip', { 
-        url, 
-        title: videoMeta.title,
-        start: range[0], 
-        end: range[1],
-        quality: selectedQuality,
-        format: containerFormat,
-        id: sessionId 
-      });
-      showToast('Download complete! Saved to ' + targetPath, 'success');
+      // Multi-Clip Mode
+      if (multiClipEnabled && isPro && segments.length > 0) {
+        const results = await invoke<string[]>('download_multi_clip', { 
+          url, 
+          title: videoMeta.title,
+          segments: segments,
+          quality: selectedQuality,
+          format: containerFormat,
+          id: sessionId 
+        });
+        showToast(`${results.length} clips exported to ${targetPath}`, 'success');
+        
+        // Save each clip to history
+        for (let i = 0; i < segments.length; i++) {
+          const seg = segments[i];
+          const historyItem = {
+            id: `${Date.now()}-${i}`,
+            title: `${videoMeta.title} (Clip ${i + 1})`,
+            url: url,
+            thumbnail: videoMeta.preview_url || undefined,
+            duration: seg.end - seg.start,
+            quality: selectedQuality,
+            format: containerFormat,
+            filePath: results[i] || `${targetPath}/${videoMeta.title}_clip${i + 1}.${containerFormat}`,
+            downloadedAt: new Date().toISOString(),
+          };
+          invoke('save_download_history', { item: historyItem }).catch(console.error);
+        }
+      } else {
+        // Single Clip Mode
+        await invoke('download_clip', { 
+          url, 
+          title: videoMeta.title,
+          start: range[0], 
+          end: range[1],
+          quality: selectedQuality,
+          format: containerFormat,
+          id: sessionId 
+        });
+        showToast('Download complete! Saved to ' + targetPath, 'success');
+        
+        // Save to download history (Pro feature)
+        if (isPro) {
+          const historyItem = {
+            id: `${Date.now()}`,
+            title: videoMeta.title,
+            url: url,
+            thumbnail: videoMeta.preview_url || undefined,
+            duration: range[1] - range[0],
+            quality: selectedQuality,
+            format: containerFormat,
+            filePath: `${targetPath}/${videoMeta.title}_clip_${sessionId}.${containerFormat}`,
+            downloadedAt: new Date().toISOString(),
+          };
+          invoke('save_download_history', { item: historyItem }).catch(console.error);
+        }
+      }
     } catch (error) {
       if (typeof error === 'string' && error.includes('cancelled')) {
         showToast('Download cancelled.', 'info');
@@ -448,6 +532,27 @@ function App() {
         }}
       />
 
+      {/* Titlebar Drag Region - for macOS window dragging */}
+      <div className="titlebar-drag-region" data-tauri-drag-region>
+        <TitlebarActions 
+          isPro={isPro}
+          onClipboardUrl={(detectedUrl) => {
+            setUrl(detectedUrl);
+            handleUrlSubmit(detectedUrl, false);
+          }}
+          onOpenHistory={() => setShowHistory(true)}
+          showToast={showToast}
+        />
+      </div>
+
+      {/* Download History Panel */}
+      <DownloadHistory 
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        isPro={isPro}
+        showToast={showToast}
+      />
+
       {/* Top Bar */}
       <div className="top-bar">
         <UserMenu 
@@ -456,7 +561,10 @@ function App() {
           onSettingsClick={() => setShowSettings(true)}
           onLogout={handleLogout}
         />
-        <img src="/clipme-logo-white.svg" alt="clipme" className="top-bar-logo" style={{ height: '32px' }} />
+        <div className="top-bar-logo">
+          <img src="/clipme-logo-white.svg" alt="clipme" className="logo-dark" />
+          <img src="/clipme-logo-black.svg" alt="clipme" className="logo-light" />
+        </div>
         <ProBadge isPro={isPro} onProActivated={() => {
           setIsPro(true);
           setSelectedQuality('Best');
@@ -492,11 +600,49 @@ function App() {
             </div>
 
             <div className="controls-column">
-              <Timeline 
-                duration={videoMeta.duration} 
-                range={range} 
-                onChange={setRange} 
-              />
+              {/* Mode Toggle */}
+              <div className="clip-mode-toggle">
+                <button 
+                  className={`mode-btn ${!multiClipEnabled ? 'active' : ''}`}
+                  onClick={() => setMultiClipEnabled(false)}
+                >
+                  Single Clip
+                </button>
+                <button 
+                  className={`mode-btn ${multiClipEnabled ? 'active' : ''} ${!isPro ? 'pro-locked' : ''}`}
+                  onClick={() => {
+                    if (!isPro) {
+                      showToast('Multi-Clip is a Pro feature', 'info');
+                      return;
+                    }
+                    setMultiClipEnabled(true);
+                    // Initialize with current range if switching to multi-clip
+                    if (segments.length === 0) {
+                      setSegments([{ id: `clip-${Date.now()}`, start: range[0], end: range[1] }]);
+                    }
+                  }}
+                >
+                  Multi-Clip
+                  {!isPro && <span className="pro-badge-inline">PRO</span>}
+                </button>
+              </div>
+
+              {/* Timeline: Single or Multi-Clip */}
+              {multiClipEnabled && isPro ? (
+                <MultiClipTimeline
+                  duration={videoMeta.duration}
+                  segments={segments}
+                  onSegmentsChange={setSegments}
+                  isPro={isPro}
+                  onProRequired={() => showToast('Multi-Clip is a Pro feature', 'info')}
+                />
+              ) : (
+                <Timeline 
+                  duration={videoMeta.duration} 
+                  range={range} 
+                  onChange={setRange} 
+                />
+              )}
 
               <div className="card">
                 <h3>{isLocalFile ? 'Transcode & Clip' : 'Output Settings'}</h3>
@@ -613,9 +759,14 @@ function App() {
       </div>
 
       <div className="bottom-bar">
-        <div className="version-badge">
+        <div 
+          className="version-badge" 
+          onClick={checkForUpdates}
+          style={{ cursor: 'pointer' }}
+          title="Check for updates"
+        >
           <img src="/stars.svg" alt="" width="14" height="14" />
-          <span>{loadingVersion ? '...' : `v${version}`}</span>
+          <span>{loadingVersion ? 'Checking...' : `v${version}`}</span>
         </div>
 
         <div className="bottom-bar-right">

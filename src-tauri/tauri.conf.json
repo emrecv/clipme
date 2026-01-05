@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Clipme",
-  "version": "1.1.8",
+  "version": "1.1.10",
   "identifier": "com.emre.clipme",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -12,16 +12,22 @@
   "app": {
     "windows": [
       {
-        "title": "Clipme",
+        "title": "",
         "width": 1200,
-        "height": 800,
+        "height": 900,
         "minWidth": 900,
-        "minHeight": 600,
-        "center": true
+        "minHeight": 700,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
-      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' asset: https://asset.localhost blob: data: https://*.ytimg.com; media-src 'self' asset: https://asset.localhost blob: https://*.youtube.com; frame-src https://www.youtube.com https://youtube.com; connect-src 'self' https://api.gumroad.com https://github.com;"
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**/*"]
+      }
     }
   },
   "bundle": {

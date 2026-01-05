@@ -13,7 +13,7 @@ use std::os::windows::process::CommandExt;
 
 /// Helper to create a command that doesn't spawn a visible window on Windows
 fn create_windowless_command(program: &std::path::Path) -> Command {
-    let mut cmd = Command::new(program);
+    let cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -24,7 +24,7 @@ fn create_windowless_command(program: &std::path::Path) -> Command {
 
 // Helper allowing string paths too (for system commands)
 fn create_windowless_command_str(program: &str) -> Command {
-    let mut cmd = Command::new(program);
+    let cmd = Command::new(program);
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -1208,6 +1208,241 @@ async fn download_clip(
     Ok("Download complete".to_string())
 }
 
+// Segment struct for multi-clip
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct ClipSegment {
+    id: String,
+    start: f64,
+    end: f64,
+}
+
+#[derive(Clone, Serialize, Debug)]
+struct MultiClipProgress {
+    current_clip: usize,
+    total_clips: usize,
+    clip_percent: f64,
+    overall_percent: f64,
+    speed: String,
+    eta: String,
+    session_id: u64,
+}
+
+#[tauri::command]
+async fn download_multi_clip(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+    title: String,
+    segments: Vec<ClipSegment>,
+    quality: String,
+    format: String,
+    id: u64,
+) -> Result<Vec<String>, String> {
+    println!(
+        "Processing multi-clip: {} ({} segments) Quality: {} Format: {} ID: {}",
+        url, segments.len(), quality, format, id
+    );
+
+    if segments.is_empty() {
+        return Err("No segments provided".to_string());
+    }
+
+    let total_clips = segments.len();
+    let mut results: Vec<String> = Vec::new();
+
+    // Get binary paths
+    let ffmpeg_path = get_ffmpeg_path(&app);
+    let ytdlp_path = get_ytdlp_path(&app);
+
+    let safe_title = sanitize_filename(&title);
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Setup output directory
+    let output_dir = {
+        let path_lock = state
+            .download_path
+            .lock()
+            .map_err(|_| "Failed to lock state")?;
+        if let Some(ref custom_path) = *path_lock {
+            custom_path.clone()
+        } else {
+            app.path()
+                .download_dir()
+                .map_err(|e| e.to_string())?
+                .join("YT_Clipper")
+        }
+    };
+    if !output_dir.exists() {
+        std::fs::create_dir_all(&output_dir).map_err(|e| e.to_string())?;
+    }
+
+    let is_local_file = std::path::Path::new(&url).exists();
+    let ext = if format.is_empty() { "mp4".to_string() } else { format.to_lowercase() };
+
+    for (index, segment) in segments.iter().enumerate() {
+        let clip_num = index + 1;
+        let filename = format!("{}_clip{}_{}.{}", safe_title, clip_num, timestamp, ext);
+        let output_path = output_dir.join(&filename);
+        let output_path_str = output_path.to_string_lossy().to_string();
+
+        // Emit progress for this clip
+        let _ = app.emit(
+            "multi-clip-progress",
+            MultiClipProgress {
+                current_clip: clip_num,
+                total_clips,
+                clip_percent: 0.0,
+                overall_percent: (index as f64 / total_clips as f64) * 100.0,
+                speed: "Starting".to_string(),
+                eta: format!("Clip {}/{}", clip_num, total_clips),
+                session_id: id,
+            },
+        );
+
+        {
+            let mut file_lock = state
+                .current_file_path
+                .lock()
+                .map_err(|_| "Failed to lock state")?;
+            *file_lock = Some(output_path.clone());
+        }
+
+        let clip_duration = segment.end - segment.start;
+
+        if is_local_file {
+            // Local file: use FFmpeg directly
+            let mut ffmpeg_args = vec![
+                "-y".to_string(),
+                "-i".to_string(),
+                url.clone(),
+                "-ss".to_string(),
+                segment.start.to_string(),
+                "-t".to_string(),
+                clip_duration.to_string(),
+                "-c:v".to_string(),
+                "libx264".to_string(),
+                "-preset".to_string(),
+                "fast".to_string(),
+                "-crf".to_string(),
+                "23".to_string(),
+                "-c:a".to_string(),
+                "aac".to_string(),
+                "-b:a".to_string(),
+                "192k".to_string(),
+                output_path_str.clone(),
+            ];
+
+            let mut child = create_windowless_command(&ffmpeg_path)
+                .args(&ffmpeg_args)
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("Failed to start ffmpeg for clip {}: {}", clip_num, e))?;
+
+            let pid = child.id();
+            {
+                let mut pid_lock = state.download_pid.lock().map_err(|_| "Failed to lock state")?;
+                *pid_lock = Some(pid);
+            }
+
+            let status = child.wait().map_err(|e| format!("FFmpeg failed for clip {}: {}", clip_num, e))?;
+
+            if !status.success() {
+                return Err(format!("Clip {} encoding failed", clip_num));
+            }
+        } else {
+            // Remote URL: use yt-dlp
+            let section_range = format!("*{}-{}", segment.start, segment.end);
+            let format_arg = match quality.as_str() {
+                "1080p" => "bestvideo[height=1080][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height=1080]+bestaudio/best[height<=1080]",
+                "720p" => "bestvideo[height=720][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height=720]+bestaudio/best[height<=720]",
+                "480p" => "bestvideo[height=480][vcodec^=avc]+bestaudio[ext=m4a]/bestvideo[height=480]+bestaudio/best[height<=480]",
+                "Audio Only" => "bestaudio/best",
+                _ => "bestvideo+bestaudio/best",
+            };
+
+            let args = vec![
+                "--download-sections".to_string(),
+                section_range,
+                "-o".to_string(),
+                output_path_str.clone(),
+                "-f".to_string(),
+                format_arg.to_string(),
+                "--merge-output-format".to_string(),
+                ext.to_string(),
+                "--newline".to_string(),
+                "--concurrent-fragments".to_string(),
+                "8".to_string(),
+                url.clone(),
+            ];
+
+            let mut child = create_windowless_command(&ytdlp_path)
+                .args(&args)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("Failed to start yt-dlp for clip {}: {}", clip_num, e))?;
+
+            let pid = child.id();
+            {
+                let mut pid_lock = state.download_pid.lock().map_err(|_| "Failed to lock state")?;
+                *pid_lock = Some(pid);
+            }
+
+            let status = child.wait().map_err(|e| format!("yt-dlp failed for clip {}: {}", clip_num, e))?;
+
+            if !status.success() {
+                return Err(format!("Clip {} download failed", clip_num));
+            }
+        }
+
+        // Emit completion for this clip
+        let _ = app.emit(
+            "multi-clip-progress",
+            MultiClipProgress {
+                current_clip: clip_num,
+                total_clips,
+                clip_percent: 100.0,
+                overall_percent: ((clip_num as f64) / total_clips as f64) * 100.0,
+                speed: "Complete".to_string(),
+                eta: if clip_num < total_clips { 
+                    format!("Next: Clip {}", clip_num + 1) 
+                } else { 
+                    "Done".to_string() 
+                },
+                session_id: id,
+            },
+        );
+
+        results.push(output_path_str);
+    }
+
+    {
+        let mut pid_lock = state.download_pid.lock().map_err(|_| "Failed to lock state")?;
+        *pid_lock = None;
+        let mut file_lock = state.current_file_path.lock().map_err(|_| "Failed to lock state")?;
+        *file_lock = None;
+    }
+
+    // Final completion
+    let _ = app.emit(
+        "multi-clip-progress",
+        MultiClipProgress {
+            current_clip: total_clips,
+            total_clips,
+            clip_percent: 100.0,
+            overall_percent: 100.0,
+            speed: "All Done".to_string(),
+            eta: format!("{} clips exported", total_clips),
+            session_id: id,
+        },
+    );
+
+    Ok(results)
+}
+
 fn parse_progress_template(line: &str) -> Option<DownloadProgress> {
     let parts: Vec<&str> = line.split('|').collect();
     if parts.len() < 5 {
@@ -1276,6 +1511,137 @@ fn parse_ffmpeg_progress(line: &str, total_duration: f64) -> Option<DownloadProg
     }
 }
 
+// Download History Item
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct DownloadHistoryItem {
+    id: String,
+    title: String,
+    url: String,
+    thumbnail: Option<String>,
+    duration: f64,
+    quality: String,
+    format: String,
+    #[serde(rename = "filePath")]
+    file_path: String,
+    #[serde(rename = "fileSize")]
+    file_size: Option<u64>,
+    #[serde(rename = "downloadedAt")]
+    downloaded_at: String,
+}
+
+#[tauri::command]
+async fn get_download_history(app: AppHandle) -> Result<Vec<DownloadHistoryItem>, String> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("Failed to get config dir: {}", e))?;
+    let history_file = config_dir.join("download_history.json");
+
+    if history_file.exists() {
+        let content = fs::read_to_string(&history_file)
+            .map_err(|e| format!("Failed to read history: {}", e))?;
+        let items: Vec<DownloadHistoryItem> = serde_json::from_str(&content)
+            .unwrap_or_else(|_| Vec::new());
+        Ok(items)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[tauri::command]
+async fn save_download_history(
+    app: AppHandle,
+    item: DownloadHistoryItem,
+) -> Result<(), String> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("Failed to get config dir: {}", e))?;
+    
+    if !config_dir.exists() {
+        fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to create config dir: {}", e))?;
+    }
+    
+    let history_file = config_dir.join("download_history.json");
+    
+    // Load existing history
+    let mut items: Vec<DownloadHistoryItem> = if history_file.exists() {
+        let content = fs::read_to_string(&history_file).unwrap_or_else(|_| "[]".to_string());
+        serde_json::from_str(&content).unwrap_or_else(|_| Vec::new())
+    } else {
+        Vec::new()
+    };
+    
+    // Add new item at the beginning
+    items.insert(0, item);
+    
+    // Keep only last 50 items
+    items.truncate(50);
+    
+    // Save
+    let json_str = serde_json::to_string_pretty(&items)
+        .map_err(|e| format!("Failed to serialize history: {}", e))?;
+    fs::write(&history_file, json_str)
+        .map_err(|e| format!("Failed to save history: {}", e))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_download_history(app: AppHandle) -> Result<(), String> {
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("Failed to get config dir: {}", e))?;
+    let history_file = config_dir.join("download_history.json");
+    
+    if history_file.exists() {
+        fs::remove_file(&history_file)
+            .map_err(|e| format!("Failed to clear history: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_file_location(path: String) -> Result<(), String> {
+    let path = std::path::Path::new(&path);
+    
+    if !path.exists() {
+        return Err("File not found".to_string());
+    }
+    
+    let parent = path.parent().unwrap_or(path);
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open: {}", e))?;
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1304,7 +1670,12 @@ pub fn run() {
             get_license_status,
             clear_license,
             get_app_settings,
-            save_app_settings
+            save_app_settings,
+            get_download_history,
+            save_download_history,
+            clear_download_history,
+            open_file_location,
+            download_multi_clip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

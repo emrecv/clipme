@@ -24,5 +24,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 // Call immediately after render attempt
 signalAppLoaded();
 
+// Disable context menu for native app feel
+document.addEventListener('contextmenu', (event) => {
+  event.preventDefault();
+});
+
 // Remove static loader once React mounts successfully
 // (React will replace the #root content, effectively removing the loader HTML inside it)
